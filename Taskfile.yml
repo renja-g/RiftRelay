@@ -1,0 +1,13 @@
+# https://taskfile.dev
+
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task --list-all
+
+  gen-path-patterns:
+    cmds:
+      - go run scripts/genrate_path_patterns.go > internal/router/path_patterns.go
+    desc: Generate path patterns from the Riot API OpenAPI spec.

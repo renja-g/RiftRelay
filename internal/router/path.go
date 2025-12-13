@@ -7,8 +7,9 @@ import (
 )
 
 type PathInfo struct {
-	Region string
-	Path   string
+	Region      string
+	Path        string
+	PathPattern string
 }
 
 // ShiftPath splits "/region/rest/of/path" into PathInfo.
@@ -26,7 +27,48 @@ func ShiftPath(p string) (info PathInfo, ok bool) {
 	}
 
 	info.Path = "/" + parts[1]
+	info.PathPattern = findMatchingPattern(info.Path)
+
 	return info, true
+}
+
+func findMatchingPattern(reqPath string) string {
+	for _, pattern := range PathPatterns {
+		if pattern == reqPath {
+			return pattern
+		}
+	}
+
+	reqSegments := strings.Split(reqPath, "/")
+	reqLen := len(reqSegments)
+
+	for _, pattern := range PathPatterns {
+		if !strings.Contains(pattern, "{") {
+			continue
+		}
+
+		patSegments := strings.Split(pattern, "/")
+		if len(patSegments) != reqLen {
+			continue
+		}
+
+		match := true
+		for i := 0; i < reqLen; i++ {
+			if strings.HasPrefix(patSegments[i], "{") && strings.HasSuffix(patSegments[i], "}") {
+				continue
+			}
+			if reqSegments[i] != patSegments[i] {
+				match = false
+				break
+			}
+		}
+
+		if match {
+			return pattern
+		}
+	}
+
+	return ""
 }
 
 type pathContextKey struct{}
