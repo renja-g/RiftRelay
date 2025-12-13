@@ -49,11 +49,13 @@ func (t retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		delay := parseRetryAfter(resp.Header.Get("Retry-After"))
 		resp.Body.Close()
 
-		newBody, err := req.GetBody()
-		if err != nil {
-			return nil, err
+		if req.GetBody != nil {
+			newBody, err := req.GetBody()
+			if err != nil {
+				return nil, err
+			}
+			req.Body = newBody
 		}
-		req.Body = newBody
 
 		if delay > 0 {
 			select {
@@ -70,6 +72,10 @@ func (t retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 func parseRetryAfter(v string) time.Duration {
 	if v == "" {
 		return 0
+	}
+
+	if d, err := time.ParseDuration(v); err == nil {
+		return d
 	}
 
 	if secs, err := time.ParseDuration(v + "s"); err == nil {
