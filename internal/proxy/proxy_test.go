@@ -496,10 +496,6 @@ func TestProxyIntegration(t *testing.T) {
 func TestDefaultTransport(t *testing.T) {
 	transport := defaultTransport()
 
-	if transport == nil {
-		t.Error("defaultTransport() returned nil")
-	}
-
 	if !transport.ForceAttemptHTTP2 {
 		t.Error("defaultTransport() ForceAttemptHTTP2 = false, want true")
 	}
