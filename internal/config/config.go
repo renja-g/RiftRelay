@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 )
 
 const (
@@ -18,8 +19,8 @@ type Config struct {
 
 func Load() (Config, error) {
 	cfg := Config{
-		Token:      os.Getenv("RIOT_TOKEN"),
-		Port:       os.Getenv("PORT"),
+		Token:      strings.TrimSpace(os.Getenv("RIOT_TOKEN")),
+		Port:       strings.TrimSpace(os.Getenv("PORT")),
 		MaxRetries: defaultMaxRetries,
 	}
 

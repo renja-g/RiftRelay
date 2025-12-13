@@ -92,90 +92,6 @@ func TestNew(t *testing.T) {
 	}
 }
 
-func TestDirector(t *testing.T) {
-	tests := []struct {
-		name          string
-		cfg           config.Config
-		path          string
-		pathInContext bool
-		pathInfo      router.PathInfo
-		wantScheme    string
-		wantHost      string
-		wantPath      string
-		wantHeader    string
-		wantHeaderVal string
-		shouldModify  bool
-	}{
-		{
-			name: "director with path in context",
-			cfg: config.Config{
-				Token:      "test-token-123",
-				MaxRetries: 2,
-			},
-			path:          "/na1/lol/summoner/v4/summoners/me",
-			pathInContext: true,
-			pathInfo: router.PathInfo{
-				Region:      "na1",
-				Path:        "/lol/summoner/v4/summoners/me",
-				PathPattern: "/lol/summoner/v4/summoners/me",
-			},
-			wantScheme:    "https",
-			wantHost:      "na1.api.riotgames.com",
-			wantPath:      "/lol/summoner/v4/summoners/me",
-			wantHeader:    "X-Riot-Token",
-			wantHeaderVal: "test-token-123",
-			shouldModify:  true,
-		},
-		{
-			name: "director with path from URL",
-			cfg: config.Config{
-				Token:      "token-from-url",
-				MaxRetries: 2,
-			},
-			path:          "/euw1/riot/account/v1/accounts/me",
-			pathInContext: false,
-			wantScheme:    "https",
-			wantHost:      "euw1.api.riotgames.com",
-			wantPath:      "/riot/account/v1/accounts/me",
-			wantHeader:    "X-Riot-Token",
-			wantHeaderVal: "token-from-url",
-			shouldModify:  true,
-		},
-		{
-			name: "director with invalid path",
-			cfg: config.Config{
-				Token:      "test-token",
-				MaxRetries: 2,
-			},
-			path:          "/",
-			pathInContext: false,
-			shouldModify:  false,
-		},
-		{
-			name: "director with different region",
-			cfg: config.Config{
-				Token:      "kr-token",
-				MaxRetries: 2,
-			},
-			path:          "/kr/lol/match/v5/matches/12345",
-			pathInContext: false,
-			wantScheme:    "https",
-			wantHost:      "kr.api.riotgames.com",
-			wantPath:      "/lol/match/v5/matches/12345",
-			wantHeader:    "X-Riot-Token",
-			wantHeaderVal: "kr-token",
-			shouldModify:  true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// This test is covered by TestDirectorDirect
-			// The director function is tested directly there
-		})
-	}
-}
-
 func TestDirectorDirect(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -224,7 +140,6 @@ func TestDirectorDirect(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a reverse proxy to get access to the director
 			o := options{
 				baseTransport: http.DefaultTransport,
 			}
@@ -321,7 +236,6 @@ func TestDirectorInvalidPath(t *testing.T) {
 					t.Errorf("Director() Scheme = %v, want %v", req.URL.Scheme, tt.expectedScheme)
 				}
 			} else {
-				// For invalid paths, host and scheme should remain unchanged
 				if req.URL.Host != "" {
 					t.Errorf("Director() should not modify Host for invalid path, got %v", req.URL.Host)
 				}
@@ -335,10 +249,9 @@ func TestDirectorInvalidPath(t *testing.T) {
 
 func TestApplyMiddleware(t *testing.T) {
 	tests := []struct {
-		name            string
-		middlewares     []Middleware
-		wantOrder       []string
-		wantHeaderOrder []string
+		name        string
+		middlewares []Middleware
+		wantOrder   []string
 	}{
 		{
 			name: "single middleware",
@@ -442,7 +355,6 @@ func TestBufferPool(t *testing.T) {
 			}
 		}
 
-		// Put them back
 		for _, buf := range bufs {
 			bp.Put(buf)
 		}
@@ -463,7 +375,6 @@ func TestErrorHandler(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/na1/lol/summoner/v4/summoners/me", nil)
 	rec := httptest.NewRecorder()
 
-	// Call the error handler directly with a test error
 	testErr := httputil.ErrLineTooLong
 	rp.ErrorHandler(rec, req, testErr)
 
@@ -521,7 +432,6 @@ func TestWithMiddleware(t *testing.T) {
 		t.Errorf("WithMiddleware() middlewares length = %v, want %v", len(o.middlewares), 2)
 	}
 
-	// Test that the middlewares are actually callable
 	nextCalled := false
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		nextCalled = true
@@ -550,9 +460,7 @@ func TestProxyIntegration(t *testing.T) {
 		MaxRetries: 2,
 	}
 
-	// Create a backend server
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify the request was modified correctly
 		if r.Header.Get("X-Riot-Token") != cfg.Token {
 			t.Errorf("Backend received token = %v, want %v", r.Header.Get("X-Riot-Token"), cfg.Token)
 		}
@@ -567,8 +475,6 @@ func TestProxyIntegration(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	// Create proxy with custom transport that points to our test server
-	// We can't easily override the director's host, so we'll test the middleware path
 	middlewareCalled := false
 	handler := New(cfg, WithMiddleware(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -582,8 +488,6 @@ func TestProxyIntegration(t *testing.T) {
 
 	handler.ServeHTTP(rec, req)
 
-	// The proxy will try to make a real request, which will fail in tests
-	// But we can verify the middleware was called and the handler was set up
 	if !middlewareCalled {
 		t.Error("Middleware was not called in integration test")
 	}
