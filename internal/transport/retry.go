@@ -47,6 +47,13 @@ func (t retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 
 		delay := parseRetryAfter(resp.Header.Get("Retry-After"))
+		if delay <= 0 {
+			// Fallback exponential backoff when header missing/invalid.
+			delay = time.Duration(1<<attempt) * time.Second
+			if delay > 30*time.Second {
+				delay = 30 * time.Second
+			}
+		}
 		resp.Body.Close()
 
 		if req.GetBody != nil {

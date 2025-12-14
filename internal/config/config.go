@@ -8,7 +8,7 @@ import (
 
 const (
 	defaultPort       = "8080"
-	defaultMaxRetries = 2
+	defaultMaxRetries = 3
 )
 
 type Config struct {

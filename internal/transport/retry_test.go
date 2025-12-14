@@ -297,6 +297,43 @@ func TestRetryTransport_RetryWithNilBody(t *testing.T) {
 	}
 }
 
+func TestRetryTransport_BackoffWithoutRetryAfter(t *testing.T) {
+	mock := &mockTransport{
+		responses: []*http.Response{
+			{
+				StatusCode: http.StatusTooManyRequests,
+				Body:       http.NoBody,
+				Header:     make(http.Header), // missing Retry-After -> fallback backoff
+			},
+			{
+				StatusCode: http.StatusOK,
+				Body:       http.NoBody,
+				Header:     make(http.Header),
+			},
+		},
+	}
+
+	rt := NewRetryTransport(mock, 3)
+	req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+	req.GetBody = func() (io.ReadCloser, error) {
+		return http.NoBody, nil
+	}
+
+	start := time.Now()
+	resp, err := rt.RoundTrip(req)
+	duration := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("RoundTrip() error = %v, want nil", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("RoundTrip() status = %v, want %v", resp.StatusCode, http.StatusOK)
+	}
+	if duration < time.Second {
+		t.Errorf("RoundTrip() should back off at least 1s, got %v", duration)
+	}
+}
+
 func TestRetryTransport_ContextCancellation(t *testing.T) {
 	mock := &mockTransport{
 		responses: []*http.Response{

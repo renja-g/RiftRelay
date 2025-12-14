@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/renja-g/rp/internal/config"
+	"github.com/renja-g/rp/internal/ratelimit"
 	"github.com/renja-g/rp/internal/router"
 	"github.com/renja-g/rp/internal/transport"
 )
@@ -67,7 +68,14 @@ func New(cfg config.Config, opts ...Option) http.Handler {
 }
 
 func newReverseProxy(cfg config.Config, o options) *httputil.ReverseProxy {
-	transportWithRetry := transport.NewRetryTransport(o.baseTransport, cfg.MaxRetries)
+	scheduler := NewRateScheduler(func() *ratelimit.State {
+		return ratelimit.NewState(nil)
+	})
+	scheduledTransport := scheduledTransport{
+		scheduler: scheduler,
+		base:      o.baseTransport,
+	}
+	transportWithRetry := transport.NewRetryTransport(scheduledTransport, cfg.MaxRetries)
 
 	pool := &sync.Pool{
 		New: func() any {
