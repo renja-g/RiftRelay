@@ -11,3 +11,13 @@ tasks:
     cmds:
       - go run scripts/genrate_path_patterns.go > internal/router/path_patterns.go
     desc: Generate path patterns from the Riot API OpenAPI spec.
+
+  test:
+    cmds:
+      - go test ./...
+    desc: Run all tests.
+
+  fix:
+    cmds:
+      - go fmt ./...
+    desc: Format all go files.
