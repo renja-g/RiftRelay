@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/renja-g/rp/internal/config"
-	"github.com/renja-g/rp/internal/router"
+	"github.com/renja-g/RiftRelay/internal/config"
+	"github.com/renja-g/RiftRelay/internal/router"
 )
 
 func TestNew(t *testing.T) {

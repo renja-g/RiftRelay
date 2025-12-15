@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/renja-g/rp/internal/ratelimit"
+	"github.com/renja-g/RiftRelay/internal/ratelimit"
 )
 
 type requestPermit struct {

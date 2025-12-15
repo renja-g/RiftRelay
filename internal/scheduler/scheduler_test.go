@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/renja-g/rp/internal/ratelimit"
+	"github.com/renja-g/RiftRelay/internal/ratelimit"
 )
 
 func TestPerKeyScheduler_PriorityPreemptsNormal(t *testing.T) {

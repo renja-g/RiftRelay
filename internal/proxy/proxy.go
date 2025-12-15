@@ -7,11 +7,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/renja-g/rp/internal/config"
-	"github.com/renja-g/rp/internal/ratelimit"
-	"github.com/renja-g/rp/internal/router"
-	"github.com/renja-g/rp/internal/scheduler"
-	"github.com/renja-g/rp/internal/transport"
+	"github.com/renja-g/RiftRelay/internal/config"
+	"github.com/renja-g/RiftRelay/internal/ratelimit"
+	"github.com/renja-g/RiftRelay/internal/router"
+	"github.com/renja-g/RiftRelay/internal/scheduler"
+	"github.com/renja-g/RiftRelay/internal/transport"
 )
 
 type bufferPool struct {

@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/renja-g/rp/internal/router"
+	"github.com/renja-g/RiftRelay/internal/router"
 )
 
 func TestBuildKeyUsesPathInfo(t *testing.T) {

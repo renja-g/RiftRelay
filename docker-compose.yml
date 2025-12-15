@@ -1,5 +1,5 @@
 services:
-  rp:
+  riftrelay:
     build:
       context: .
       dockerfile: Dockerfile

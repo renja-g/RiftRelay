@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/renja-g/rp/internal/config"
+	"github.com/renja-g/RiftRelay/internal/config"
 )
 
 func TestProxyIntegration_SuccessfulRequest(t *testing.T) {

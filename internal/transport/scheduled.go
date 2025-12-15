@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/renja-g/rp/internal/router"
-	"github.com/renja-g/rp/internal/scheduler"
+	"github.com/renja-g/RiftRelay/internal/router"
+	"github.com/renja-g/RiftRelay/internal/scheduler"
 )
 
 type scheduledTransport struct {

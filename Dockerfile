@@ -16,10 +16,10 @@ COPY --from=deps /app/go.mod ./
 COPY main.go ./
 COPY internal/ ./internal/
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o rp ./main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -o riftrelay ./main.go
 
 FROM gcr.io/distroless/base-debian12 AS runner
 
-COPY --from=builder /app/rp /rp
+COPY --from=builder /app/riftrelay /riftrelay
 
-CMD ["/rp"]
+CMD ["/riftrelay"]
