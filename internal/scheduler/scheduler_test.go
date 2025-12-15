@@ -1,4 +1,4 @@
-package proxy
+package scheduler
 
 import (
 	"context"
@@ -50,4 +50,3 @@ func TestPerKeyScheduler_PriorityPreemptsNormal(t *testing.T) {
 		t.Fatalf("normal request error = %v, want nil", normalErr)
 	}
 }
-

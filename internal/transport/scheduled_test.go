@@ -1,4 +1,4 @@
-package proxy
+package transport
 
 import (
 	"context"
@@ -25,4 +25,3 @@ func TestBuildKeyUsesPathInfo(t *testing.T) {
 		t.Fatalf("buildKey() = %q, want %q", got, want)
 	}
 }
-

@@ -1,4 +1,4 @@
-package proxy
+package scheduler
 
 import (
 	"context"
@@ -134,7 +134,7 @@ func NewRateScheduler(newState func() *ratelimit.State) *RateScheduler {
 	}
 }
 
-func (s *RateScheduler) acquire(ctx context.Context, key string, priority bool) error {
+func (s *RateScheduler) Acquire(ctx context.Context, key string, priority bool) error {
 	s.mu.Lock()
 	sched, ok := s.perKey[key]
 	if !ok {
@@ -158,7 +158,7 @@ func (s *RateScheduler) acquire(ctx context.Context, key string, priority bool) 
 	return <-req.res
 }
 
-func (s *RateScheduler) updateFromHeaders(key string, h http.Header) {
+func (s *RateScheduler) UpdateFromHeaders(key string, h http.Header) {
 	s.mu.Lock()
 	sched, ok := s.perKey[key]
 	s.mu.Unlock()
