@@ -14,5 +14,5 @@ jobs:
 
       - name: Push Docker image
         run: |
-          docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_HUB_TOKEN }}
+          docker login -u renjag -p ${{ secrets.DOCKER_HUB_TOKEN }}
           docker push renjag/riftrelay:latest

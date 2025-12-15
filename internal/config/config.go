@@ -19,13 +19,13 @@ type Config struct {
 
 func Load() (Config, error) {
 	cfg := Config{
-		Token:      strings.TrimSpace(os.Getenv("RIOT_TOKEN")),
+		Token:      strings.TrimSpace(os.Getenv("RIOT_API_KEY")),
 		Port:       strings.TrimSpace(os.Getenv("PORT")),
 		MaxRetries: defaultMaxRetries,
 	}
 
 	if cfg.Token == "" {
-		return Config{}, fmt.Errorf("RIOT_TOKEN env var is required")
+		return Config{}, fmt.Errorf("RIOT_API_KEY env var is required")
 	}
 
 	if cfg.Port == "" {

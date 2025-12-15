@@ -1,0 +1,8 @@
+services:
+  riftrelay:
+    image: renjag/riftrelay
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env # Ensure the RIOT_API_KEY is set in the .env
+

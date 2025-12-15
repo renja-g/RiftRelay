@@ -51,7 +51,7 @@ func TestLoad(t *testing.T) {
 			wantPort:       "",
 			wantMaxRetries: 0,
 			wantErr:        true,
-			wantErrMsg:     "RIOT_TOKEN env var is required",
+			wantErrMsg:     "RIOT_API_KEY env var is required",
 		},
 		{
 			name:           "empty token string should error",
@@ -61,7 +61,7 @@ func TestLoad(t *testing.T) {
 			wantPort:       "",
 			wantMaxRetries: 0,
 			wantErr:        true,
-			wantErrMsg:     "RIOT_TOKEN env var is required",
+			wantErrMsg:     "RIOT_API_KEY env var is required",
 		},
 		{
 			name:           "whitespace-only token should error",
@@ -71,7 +71,7 @@ func TestLoad(t *testing.T) {
 			wantPort:       "",
 			wantMaxRetries: 0,
 			wantErr:        true,
-			wantErrMsg:     "RIOT_TOKEN env var is required",
+			wantErrMsg:     "RIOT_API_KEY env var is required",
 		},
 		{
 			name:           "port with whitespace gets trimmed",
@@ -86,13 +86,13 @@ func TestLoad(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			originalToken := os.Getenv("RIOT_TOKEN")
+			originalToken := os.Getenv("RIOT_API_KEY")
 			originalPort := os.Getenv("PORT")
 			defer func() {
 				if originalToken != "" {
-					os.Setenv("RIOT_TOKEN", originalToken)
+					os.Setenv("RIOT_API_KEY", originalToken)
 				} else {
-					os.Unsetenv("RIOT_TOKEN")
+					os.Unsetenv("RIOT_API_KEY")
 				}
 				if originalPort != "" {
 					os.Setenv("PORT", originalPort)
@@ -102,9 +102,9 @@ func TestLoad(t *testing.T) {
 			}()
 
 			if tt.riotToken != "" {
-				os.Setenv("RIOT_TOKEN", tt.riotToken)
+				os.Setenv("RIOT_API_KEY", tt.riotToken)
 			} else {
-				os.Unsetenv("RIOT_TOKEN")
+				os.Unsetenv("RIOT_API_KEY")
 			}
 			if tt.port != "" {
 				os.Setenv("PORT", tt.port)
