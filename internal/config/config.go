@@ -31,6 +31,7 @@ const (
 	defaultForceAttemptHTTP2      = true
 	defaultEnableMetrics          = true
 	defaultEnablePprof            = false
+	defaultEnableSwagger          = true
 	defaultUpstreamRequestTimeout = 0
 )
 
@@ -43,6 +44,7 @@ type Config struct {
 	ShutdownTimeout   time.Duration
 	MetricsEnabled    bool
 	PprofEnabled      bool
+	SwaggerEnabled    bool
 	UpstreamTimeout   time.Duration
 	Server            ServerConfig
 	UpstreamTransport UpstreamTransportConfig
@@ -79,6 +81,7 @@ func Load() (Config, error) {
 		ShutdownTimeout:  defaultShutdownTimeout,
 		MetricsEnabled:   defaultEnableMetrics,
 		PprofEnabled:     defaultEnablePprof,
+		SwaggerEnabled:   defaultEnableSwagger,
 		UpstreamTimeout:  defaultUpstreamRequestTimeout,
 		Server: ServerConfig{
 			ReadHeaderTimeout: defaultReadHeaderTimeout,
@@ -116,6 +119,7 @@ func Load() (Config, error) {
 
 	mustParseBool("ENABLE_METRICS", &cfg.MetricsEnabled, &errs)
 	mustParseBool("ENABLE_PPROF", &cfg.PprofEnabled, &errs)
+	mustParseBool("ENABLE_SWAGGER", &cfg.SwaggerEnabled, &errs)
 
 	mustParseDuration("SERVER_READ_HEADER_TIMEOUT", &cfg.Server.ReadHeaderTimeout, &errs)
 	mustParseDuration("SERVER_READ_TIMEOUT", &cfg.Server.ReadTimeout, &errs)

@@ -12,6 +12,7 @@ import (
 	"github.com/renja-g/RiftRelay/internal/limiter"
 	"github.com/renja-g/RiftRelay/internal/metrics"
 	"github.com/renja-g/RiftRelay/internal/proxy"
+	"github.com/renja-g/RiftRelay/internal/swagger"
 )
 
 type Server struct {
@@ -67,6 +68,9 @@ func New(cfg config.Config) (*Server, error) {
 		mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 	}
+	if cfg.SwaggerEnabled {
+		mux.Handle("/swagger/", swagger.NewHandler())
+	}
 
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Port),
@@ -90,6 +94,9 @@ func (s *Server) Start(ctx context.Context) error {
 	go func() {
 		log.Printf("RiftRelay loaded %d API key(s)", len(s.cfg.Tokens))
 		log.Printf("RiftRelay listening on http://localhost:%d", s.cfg.Port)
+		if s.cfg.SwaggerEnabled {
+			log.Printf("Swagger UI available at http://localhost:%d/swagger/", s.cfg.Port)
+		}
 		if err := s.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}

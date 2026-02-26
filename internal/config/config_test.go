@@ -39,6 +39,7 @@ func TestLoad(t *testing.T) {
 				"ADDITIONAL_WINDOW_SIZE":     "250ms",
 				"ENABLE_METRICS":             "false",
 				"ENABLE_PPROF":               "true",
+				"ENABLE_SWAGGER":             "true",
 				"TRANSPORT_MAX_IDLE_CONNS":   "111",
 				"TRANSPORT_FORCE_HTTP2":      "false",
 				"UPSTREAM_TIMEOUT":           "2s",
@@ -63,6 +64,9 @@ func TestLoad(t *testing.T) {
 				}
 				if !cfg.PprofEnabled {
 					t.Fatalf("expected pprof enabled")
+				}
+				if !cfg.SwaggerEnabled {
+					t.Fatalf("expected swagger enabled")
 				}
 				if cfg.UpstreamTransport.MaxIdleConns != 111 {
 					t.Fatalf("expected max idle 111, got %d", cfg.UpstreamTransport.MaxIdleConns)
@@ -127,6 +131,7 @@ func applyEnv(t *testing.T, values map[string]string) func() {
 		"UPSTREAM_TIMEOUT",
 		"ENABLE_METRICS",
 		"ENABLE_PPROF",
+		"ENABLE_SWAGGER",
 		"SERVER_READ_HEADER_TIMEOUT",
 		"SERVER_READ_TIMEOUT",
 		"SERVER_WRITE_TIMEOUT",

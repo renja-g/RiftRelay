@@ -14,36 +14,55 @@ func TestServerFeatureFlagRoutes(t *testing.T) {
 		name                  string
 		metricsEnabled        bool
 		pprofEnabled          bool
+		swaggerEnabled        bool
 		expectMetricsEndpoint bool
 		expectPprofEndpoint   bool
+		expectSwaggerEndpoint bool
 	}{
 		{
 			name:                  "all optional endpoints disabled",
 			metricsEnabled:        false,
 			pprofEnabled:          false,
+			swaggerEnabled:        false,
 			expectMetricsEndpoint: false,
 			expectPprofEndpoint:   false,
+			expectSwaggerEndpoint: false,
 		},
 		{
 			name:                  "metrics endpoint enabled only",
 			metricsEnabled:        true,
 			pprofEnabled:          false,
+			swaggerEnabled:        false,
 			expectMetricsEndpoint: true,
 			expectPprofEndpoint:   false,
+			expectSwaggerEndpoint: false,
 		},
 		{
 			name:                  "pprof endpoint enabled only",
 			metricsEnabled:        false,
 			pprofEnabled:          true,
+			swaggerEnabled:        false,
 			expectMetricsEndpoint: false,
 			expectPprofEndpoint:   true,
+			expectSwaggerEndpoint: false,
+		},
+		{
+			name:                  "swagger endpoint enabled only",
+			metricsEnabled:        false,
+			pprofEnabled:          false,
+			swaggerEnabled:        true,
+			expectMetricsEndpoint: false,
+			expectPprofEndpoint:   false,
+			expectSwaggerEndpoint: true,
 		},
 		{
 			name:                  "all optional endpoints enabled",
 			metricsEnabled:        true,
 			pprofEnabled:          true,
+			swaggerEnabled:        true,
 			expectMetricsEndpoint: true,
 			expectPprofEndpoint:   true,
+			expectSwaggerEndpoint: true,
 		},
 	}
 
@@ -55,6 +74,7 @@ func TestServerFeatureFlagRoutes(t *testing.T) {
 				QueueCapacity:  32,
 				MetricsEnabled: tt.metricsEnabled,
 				PprofEnabled:   tt.pprofEnabled,
+				SwaggerEnabled: tt.swaggerEnabled,
 			})
 			if err != nil {
 				t.Fatalf("new server: %v", err)
@@ -102,6 +122,21 @@ func TestServerFeatureFlagRoutes(t *testing.T) {
 				}
 			} else if pprofResp.Code == http.StatusOK {
 				t.Fatalf("expected /debug/pprof/ to be disabled, got status %d", pprofResp.Code)
+			}
+
+			swaggerResp := httptest.NewRecorder()
+			swaggerReq := httptest.NewRequest(http.MethodGet, "/swagger/", nil)
+			handler.ServeHTTP(swaggerResp, swaggerReq)
+
+			if tt.expectSwaggerEndpoint {
+				if swaggerResp.Code != http.StatusOK {
+					t.Fatalf("expected /swagger/ status %d, got %d", http.StatusOK, swaggerResp.Code)
+				}
+				if !strings.Contains(swaggerResp.Body.String(), "RiftRelay Swagger UI") {
+					t.Fatalf("expected /swagger/ response body to expose swagger ui")
+				}
+			} else if swaggerResp.Code == http.StatusOK {
+				t.Fatalf("expected /swagger/ to be disabled, got status %d", swaggerResp.Code)
 			}
 		})
 	}

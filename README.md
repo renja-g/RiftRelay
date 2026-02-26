@@ -137,6 +137,7 @@ If the path is invalid, RiftRelay returns `400 Bad Request`.
 | `UPSTREAM_TIMEOUT` | no | `0` (disabled) | `3s` |
 | `ENABLE_METRICS` | no | `true` | `false` |
 | `ENABLE_PPROF` | no | `false` | `true` |
+| `ENABLE_SWAGGER` | no | `true` | `false` |
 | `SERVER_READ_HEADER_TIMEOUT` | no | `10s` | `5s` |
 | `SERVER_READ_TIMEOUT` | no | `10s` | `5s` |
 | `SERVER_WRITE_TIMEOUT` | no | `30s` | `20s` |
@@ -160,6 +161,8 @@ If the path is invalid, RiftRelay returns `400 Bad Request`.
   - `/debug/pprof/`
   - `/debug/pprof/profile`
   - `/debug/pprof/trace`
+- Swagger UI (when enabled): `GET /swagger/`
+- Swagger spec proxy (when enabled): `GET /swagger/openapi.json`
 
 ## Development
 
