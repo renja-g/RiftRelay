@@ -1,35 +1,30 @@
 package main
 
 import (
+	"context"
 	"log"
-	"net/http"
-	"time"
+	"os/signal"
+	"syscall"
 
+	"github.com/renja-g/RiftRelay/internal/app"
 	"github.com/renja-g/RiftRelay/internal/config"
-	"github.com/renja-g/RiftRelay/internal/proxy"
 )
 
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("configuration error: %v", err)
 	}
 
-	opts := []proxy.Option{}
-
-	handler := proxy.New(cfg, opts...)
-
-	srv := &http.Server{
-		Addr:              ":" + cfg.Port,
-		Handler:           handler,
-		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       120 * time.Second,
+	server, err := app.New(cfg)
+	if err != nil {
+		log.Fatalf("startup error: %v", err)
 	}
 
-	log.Printf("Proxy listening on http://localhost:%s", cfg.Port)
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("server error: %v", err)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	if err := server.Start(ctx); err != nil {
+		log.Fatalf("server exited with error: %v", err)
 	}
 }
