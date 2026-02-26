@@ -39,6 +39,9 @@ func BenchmarkProxyEndToEnd(b *testing.B) {
 			Tokens:           []string{"bench-token"},
 			AdmissionTimeout: 2 * time.Second,
 		},
+		func(o *options) {
+			o.baseTransport = staticRoundTripper{}
+		},
 		WithLimiter(l),
 		WithMetrics(metrics.NewCollector()),
 	)
