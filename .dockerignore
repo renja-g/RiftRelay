@@ -1,0 +1,13 @@
+.git
+.gitignore
+.idea
+.env
+.env.*
+*.log
+tmp/
+dist/
+bin/
+coverage/
+*.out
+agent-transcripts/
+mcps/

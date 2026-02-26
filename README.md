@@ -71,7 +71,31 @@ go run .
 
 Default listen address is `http://localhost:8985`.
 
-### 3) Send a request
+### 3) Run with Docker (production profile)
+
+```bash
+cp .env.example .env
+```
+
+Set `RIOT_TOKEN` in `.env`, then run:
+
+```bash
+docker compose up -d --build
+```
+
+Follow logs:
+
+```bash
+docker compose logs -f riftrelay
+```
+
+Stop:
+
+```bash
+docker compose down
+```
+
+### 4) Send a request
 
 ```bash
 curl -i "http://localhost:8985/na1/lol/status/v4/platform-data"
@@ -130,6 +154,7 @@ If the path is invalid, RiftRelay returns `400 Bad Request`.
 
 ## Metrics and profiling
 
+- Health endpoint: `GET /healthz`
 - Metrics endpoint (when enabled): `GET /metrics`
 - pprof endpoints (when enabled):
   - `/debug/pprof/`

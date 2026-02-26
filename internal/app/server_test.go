@@ -65,6 +65,13 @@ func TestServerFeatureFlagRoutes(t *testing.T) {
 
 			handler := srv.server.Handler
 
+			healthResp := httptest.NewRecorder()
+			healthReq := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+			handler.ServeHTTP(healthResp, healthReq)
+			if healthResp.Code != http.StatusNoContent {
+				t.Fatalf("expected /healthz status %d, got %d", http.StatusNoContent, healthResp.Code)
+			}
+
 			metricsResp := httptest.NewRecorder()
 			metricsReq := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 			handler.ServeHTTP(metricsResp, metricsReq)

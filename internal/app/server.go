@@ -53,6 +53,9 @@ func New(cfg config.Config) (*Server, error) {
 	}
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
 	mux.Handle("/", handler)
 	if collector != nil {
 		mux.Handle("/metrics", collector)
