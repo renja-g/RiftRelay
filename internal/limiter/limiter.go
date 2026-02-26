@@ -28,9 +28,6 @@ func New(cfg Config) (*Limiter, error) {
 	if cfg.Clock == nil {
 		cfg.Clock = realClock{}
 	}
-	if cfg.Metrics == nil {
-		cfg.Metrics = noopMetrics{}
-	}
 
 	l := &Limiter{
 		cfg:       cfg,
@@ -171,12 +168,16 @@ func (l *Limiter) handleAdmit(
 				RetryAfter: maxDuration(earliest.Sub(now), time.Second),
 			},
 		}
-		l.cfg.Metrics.ObserveAdmission(0, "rejected_queue_full")
+		if metrics := l.cfg.Metrics; metrics != nil {
+			metrics.ObserveAdmission(0, "rejected_queue_full")
+		}
 		return
 	}
 
 	bucket.enqueue(req)
-	l.cfg.Metrics.ObserveQueueDepth(bucket.bucket, req.admission.Priority, bucket.depth())
+	if metrics := l.cfg.Metrics; metrics != nil {
+		metrics.ObserveQueueDepth(bucket.bucket, req.admission.Priority, bucket.depth())
+	}
 	l.dispatch(bucket, keys, wakeups)
 }
 
@@ -232,7 +233,9 @@ func (l *Limiter) dispatch(bucket *bucketQueue, keys []keyState, wakeups *wakeHe
 		keyIndex, earliest := l.pickKey(now, keys, bucket.region, bucket.bucket, req.admission.Priority)
 		if keyIndex < 0 {
 			req.resp <- admitResponse{err: &RejectedError{Reason: "no_available_key", RetryAfter: time.Second}}
-			l.cfg.Metrics.ObserveAdmission(0, "rejected_no_key")
+			if metrics := l.cfg.Metrics; metrics != nil {
+				metrics.ObserveAdmission(0, "rejected_no_key")
+			}
 			continue
 		}
 
@@ -260,8 +263,10 @@ func (l *Limiter) dispatch(bucket *bucketQueue, keys []keyState, wakeups *wakeHe
 		}
 
 		req.resp <- admitResponse{ticket: Ticket{KeyIndex: keyIndex}}
-		l.cfg.Metrics.ObserveAdmission(now.Sub(req.received), "allowed")
-		l.cfg.Metrics.ObserveQueueDepth(bucket.bucket, req.admission.Priority, bucket.depth())
+		if metrics := l.cfg.Metrics; metrics != nil {
+			metrics.ObserveAdmission(now.Sub(req.received), "allowed")
+			metrics.ObserveQueueDepth(bucket.bucket, req.admission.Priority, bucket.depth())
+		}
 	}
 }
 

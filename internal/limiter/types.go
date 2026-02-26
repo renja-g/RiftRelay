@@ -74,8 +74,3 @@ type realClock struct{}
 func (realClock) Now() time.Time {
 	return time.Now()
 }
-
-type noopMetrics struct{}
-
-func (noopMetrics) ObserveQueueDepth(string, Priority, int) {}
-func (noopMetrics) ObserveAdmission(time.Duration, string)  {}

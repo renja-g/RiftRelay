@@ -31,7 +31,11 @@ func admissionFromContext(ctx context.Context) (admissionContext, bool) {
 	return info, ok
 }
 
-func admissionMiddleware(l *limiter.Limiter, m *metrics.Collector, timeout time.Duration) func(http.Handler) http.Handler {
+func admissionMiddleware(
+	l *limiter.Limiter,
+	m *metrics.Collector,
+	timeout time.Duration,
+) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			info, ok := router.PathFromContext(r.Context())
@@ -52,7 +56,10 @@ func admissionMiddleware(l *limiter.Limiter, m *metrics.Collector, timeout time.
 			}
 			defer cancel()
 
-			start := time.Now()
+			start := time.Time{}
+			if m != nil {
+				start = time.Now()
+			}
 			ticket, err := l.Admit(admitCtx, limiter.Admission{
 				Region:   info.Region,
 				Bucket:   info.Bucket,

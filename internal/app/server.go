@@ -21,28 +21,40 @@ type Server struct {
 }
 
 func New(cfg config.Config) (*Server, error) {
-	collector := metrics.NewCollector()
+	var collector *metrics.Collector
+	if cfg.MetricsEnabled {
+		collector = metrics.NewCollector()
+	}
 
-	l, err := limiter.New(limiter.Config{
+	limiterCfg := limiter.Config{
 		KeyCount:         len(cfg.Tokens),
 		QueueCapacity:    cfg.QueueCapacity,
 		AdditionalWindow: cfg.AdditionalWindow,
-		Metrics:          collector,
-	})
+	}
+	if collector != nil {
+		limiterCfg.Metrics = collector
+	}
+
+	l, err := limiter.New(limiterCfg)
 	if err != nil {
 		return nil, fmt.Errorf("create limiter: %w", err)
 	}
 
-	handler := proxy.New(
-		cfg,
+	proxyOptions := []proxy.Option{
 		proxy.WithLimiter(l),
-		proxy.WithMetrics(collector),
-	)
-	handler = collector.Middleware(handler)
+	}
+	if collector != nil {
+		proxyOptions = append(proxyOptions, proxy.WithMetrics(collector))
+	}
+
+	handler := proxy.New(cfg, proxyOptions...)
+	if collector != nil {
+		handler = collector.Middleware(handler)
+	}
 
 	mux := http.NewServeMux()
 	mux.Handle("/", handler)
-	if cfg.MetricsEnabled {
+	if collector != nil {
 		mux.Handle("/metrics", collector)
 	}
 	if cfg.PprofEnabled {
