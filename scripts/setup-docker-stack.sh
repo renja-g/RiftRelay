@@ -92,6 +92,21 @@ set_env_value() {
   mv "$tmp_file" "$file"
 }
 
+prompt_for_token() {
+  if exec 3<>/dev/tty; then
+    printf "Enter RIOT_TOKEN: " >&3
+    if ! IFS= read -r TOKEN <&3; then
+      echo >&2
+      echo "Unable to read RIOT_TOKEN from terminal." >&2
+      echo "Provide RIOT_TOKEN with --token or RIOT_TOKEN environment variable." >&2
+    fi
+    exec 3>&-
+  else
+    echo "No interactive terminal available to prompt for RIOT_TOKEN." >&2
+    echo "Provide RIOT_TOKEN with --token or RIOT_TOKEN environment variable." >&2
+  fi
+}
+
 require_command curl
 require_command docker
 
@@ -101,8 +116,7 @@ download_file "docker-compose.yml" "$TARGET_DIR/docker-compose.yml"
 download_file ".env.example" "$TARGET_DIR/.env"
 
 if [ -z "$TOKEN" ]; then
-  printf "Enter RIOT_TOKEN: "
-  read -r TOKEN
+  prompt_for_token
 fi
 
 if [ -z "$TOKEN" ]; then
