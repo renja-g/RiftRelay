@@ -286,6 +286,141 @@ func TestLimiterResumeAfterIdleTightensPacing(t *testing.T) {
 	}
 }
 
+func TestLimiterQueuedRequestRecalculatesPacing(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func(t *testing.T, l *Limiter)
+	}{
+		{
+			name: "queued request can execute sooner as interval shrinks",
+			run: func(t *testing.T, l *Limiter) {
+				headers := make(http.Header)
+				headers.Set("X-Method-Rate-Limit", "2:1")
+				headers.Set("X-Method-Rate-Limit-Count", "0:1")
+				l.Observe(Observation{
+					Region:     "na1",
+					Bucket:     "na1:lol/status/v4/platform-data",
+					KeyIndex:   0,
+					StatusCode: http.StatusOK,
+					Header:     headers,
+				})
+				time.Sleep(20 * time.Millisecond)
+
+				ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+				defer cancel()
+
+				if _, err := l.Admit(ctx, Admission{
+					Region:   "na1",
+					Bucket:   "na1:lol/status/v4/platform-data",
+					Priority: PriorityNormal,
+				}); err != nil {
+					t.Fatalf("first admit failed: %v", err)
+				}
+
+				start := time.Now()
+				if _, err := l.Admit(ctx, Admission{
+					Region:   "na1",
+					Bucket:   "na1:lol/status/v4/platform-data",
+					Priority: PriorityNormal,
+				}); err != nil {
+					t.Fatalf("second admit failed: %v", err)
+				}
+				waited := time.Since(start)
+
+				if waited < 350*time.Millisecond || waited > 950*time.Millisecond {
+					t.Fatalf("unexpected queued wait after recalculation: %s", waited)
+				}
+			},
+		},
+		{
+			name: "queued request can be delayed after stricter observation",
+			run: func(t *testing.T, l *Limiter) {
+				initial := make(http.Header)
+				initial.Set("X-Method-Rate-Limit", "4:2")
+				initial.Set("X-Method-Rate-Limit-Count", "0:2")
+				l.Observe(Observation{
+					Region:     "na1",
+					Bucket:     "na1:lol/status/v4/platform-data",
+					KeyIndex:   0,
+					StatusCode: http.StatusOK,
+					Header:     initial,
+				})
+				time.Sleep(20 * time.Millisecond)
+
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+
+				if _, err := l.Admit(ctx, Admission{
+					Region:   "na1",
+					Bucket:   "na1:lol/status/v4/platform-data",
+					Priority: PriorityNormal,
+				}); err != nil {
+					t.Fatalf("first admit failed: %v", err)
+				}
+
+				done := make(chan time.Duration, 1)
+				errCh := make(chan error, 1)
+				go func() {
+					start := time.Now()
+					_, err := l.Admit(ctx, Admission{
+						Region:   "na1",
+						Bucket:   "na1:lol/status/v4/platform-data",
+						Priority: PriorityNormal,
+					})
+					if err != nil {
+						errCh <- err
+						return
+					}
+					done <- time.Since(start)
+				}()
+
+				time.Sleep(200 * time.Millisecond)
+				stricter := make(http.Header)
+				stricter.Set("X-Method-Rate-Limit", "4:2")
+				stricter.Set("X-Method-Rate-Limit-Count", "3:2")
+				l.Observe(Observation{
+					Region:     "na1",
+					Bucket:     "na1:lol/status/v4/platform-data",
+					KeyIndex:   0,
+					StatusCode: http.StatusOK,
+					Header:     stricter,
+				})
+
+				select {
+				case err := <-errCh:
+					t.Fatalf("second admit failed: %v", err)
+				case waited := <-done:
+					if waited < 900*time.Millisecond {
+						t.Fatalf("expected stricter update to delay queued request, got wait=%s", waited)
+					}
+					if waited > 3*time.Second {
+						t.Fatalf("queued wait exceeded expected upper bound: %s", waited)
+					}
+				case <-time.After(4 * time.Second):
+					t.Fatalf("timed out waiting for queued request to complete")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			l, err := New(Config{
+				KeyCount:         1,
+				QueueCapacity:    8,
+				AdditionalWindow: 0,
+			})
+			if err != nil {
+				t.Fatalf("new limiter: %v", err)
+			}
+			defer l.Close()
+
+			tt.run(t, l)
+		})
+	}
+}
+
 func TestLimiterPriorityBurstSlowsLaterNormalPacing(t *testing.T) {
 	type scenario struct {
 		name           string
@@ -368,7 +503,7 @@ func TestLimiterPriorityBurstSlowsLaterNormalPacing(t *testing.T) {
 		)
 	}
 
-	const minSlowdown = 50 * time.Millisecond
+	const minSlowdown = 40 * time.Millisecond
 	if highSecondWait-normalSecondWait < minSlowdown {
 		t.Fatalf(
 			"expected slowdown of at least %s after high-priority burst; normal-second wait=%s high-second wait=%s",

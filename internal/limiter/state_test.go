@@ -15,10 +15,10 @@ func TestRateStateNextAllowed(t *testing.T) {
 		want         time.Time
 	}{
 		{
-			name:  "no windows allows immediately",
-			state: rateState{},
+			name:         "no windows allows immediately",
+			state:        rateState{},
 			bypassPacing: false,
-			want:  now,
+			want:         now,
 		},
 		{
 			name: "blocked until overrides immediate access",
@@ -26,7 +26,7 @@ func TestRateStateNextAllowed(t *testing.T) {
 				blockedUntil: now.Add(2 * time.Second),
 			},
 			bypassPacing: false,
-			want: now.Add(2 * time.Second),
+			want:         now.Add(2 * time.Second),
 		},
 		{
 			name: "window exhaustion waits for reset",
@@ -41,7 +41,7 @@ func TestRateStateNextAllowed(t *testing.T) {
 				},
 			},
 			bypassPacing: false,
-			want: now.Add(5 * time.Second),
+			want:         now.Add(5 * time.Second),
 		},
 		{
 			name: "pacing spreads requests inside window",
@@ -57,7 +57,7 @@ func TestRateStateNextAllowed(t *testing.T) {
 				},
 			},
 			bypassPacing: false,
-			want: now.Add(1 * time.Second),
+			want:         now.Add(800 * time.Millisecond),
 		},
 		{
 			name: "bypass pacing allows immediate execution when window has budget",
@@ -88,7 +88,7 @@ func TestRateStateNextAllowed(t *testing.T) {
 				},
 			},
 			bypassPacing: false,
-			want: now,
+			want:         now,
 		},
 	}
 

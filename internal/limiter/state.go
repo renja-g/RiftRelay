@@ -41,19 +41,9 @@ func (s *rateState) nextAllowed(now time.Time, bypassPacing bool) time.Time {
 			continue
 		}
 
-		timeLeft := w.resetAt.Sub(now)
-		if timeLeft <= 0 {
-			continue
-		}
-
-		interval := timeLeft / time.Duration(requestsLeft)
-		if interval <= 0 {
-			continue
-		}
-
 		pacedAt := now
 		if !s.lastGranted.IsZero() {
-			nextSlot := s.lastGranted.Add(interval)
+			nextSlot := s.lastGranted.Add(w.resetAt.Sub(s.lastGranted) / time.Duration(requestsLeft+1))
 			if nextSlot.After(pacedAt) {
 				pacedAt = nextSlot
 			}
