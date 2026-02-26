@@ -1,25 +1,36 @@
-FROM golang:1.24.0-alpine AS deps
+# syntax=docker/dockerfile:1.7
 
-WORKDIR /app
+ARG GO_VERSION=1.26.0
+
+FROM golang:${GO_VERSION}-alpine AS builder
+WORKDIR /src
+
+ARG TARGETOS=linux
+ARG TARGETARCH
 
 COPY go.mod ./
-# COPY go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
-# RUN go mod download && go mod verify
+COPY . .
+RUN --mount=type=cache,target=/go/pkg/mod \
+	--mount=type=cache,target=/root/.cache/go-build \
+	CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+	go build -trimpath -ldflags="-s -w -buildid=" -o /out/riftrelay .
 
-FROM golang:1.24.0-alpine AS builder
+FROM alpine:3.23
+
+RUN apk add --no-cache ca-certificates tzdata wget
+RUN addgroup -S app && adduser -S -G app -h /nonexistent -s /sbin/nologin app
 
 WORKDIR /app
+COPY --from=builder /out/riftrelay /usr/local/bin/riftrelay
 
-COPY --from=deps /app/go.mod ./
-# COPY --from=deps /app/go.sum ./
-COPY main.go ./
-COPY internal/ ./internal/
+USER app:app
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o riftrelay ./main.go
+ENV PORT=8985
+EXPOSE 8985
 
-FROM gcr.io/distroless/base-debian12 AS runner
+HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=3 \
+	CMD wget --spider -q "http://127.0.0.1:${PORT:-8985}/healthz" || exit 1
 
-COPY --from=builder /app/riftrelay /riftrelay
-
-CMD ["/riftrelay"]
+ENTRYPOINT ["/usr/local/bin/riftrelay"]

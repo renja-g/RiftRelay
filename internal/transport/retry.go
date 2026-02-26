@@ -1,100 +1,47 @@
 package transport
 
 import (
+	"context"
+	"net"
 	"net/http"
 	"time"
+
+	"github.com/renja-g/RiftRelay/internal/config"
 )
 
-type retryTransport struct {
-	base       http.RoundTripper
-	maxRetries int
+func New(cfg config.UpstreamTransportConfig) *http.Transport {
+	dialer := &net.Dialer{
+		Timeout:   cfg.DialTimeout,
+		KeepAlive: cfg.DialKeepAlive,
+	}
+
+	return &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           dialer.DialContext,
+		ForceAttemptHTTP2:     cfg.ForceAttemptHTTP2,
+		MaxIdleConns:          cfg.MaxIdleConns,
+		MaxIdleConnsPerHost:   cfg.MaxIdleConnsPerHost,
+		MaxConnsPerHost:       cfg.MaxConnsPerHost,
+		IdleConnTimeout:       cfg.IdleConnTimeout,
+		TLSHandshakeTimeout:   cfg.TLSHandshakeTimeout,
+		ExpectContinueTimeout: cfg.ExpectContinueTimeout,
+		ResponseHeaderTimeout: cfg.ResponseHeaderTimeout,
+	}
 }
 
-// NewRetryTransport wraps the given transport with retry-on-429 behavior.
-func NewRetryTransport(base http.RoundTripper, maxRetries int) http.RoundTripper {
-	if maxRetries <= 0 {
+func WithRequestTimeout(base http.RoundTripper, timeout time.Duration) http.RoundTripper {
+	if timeout <= 0 {
 		return base
 	}
-	return retryTransport{
-		base:       base,
-		maxRetries: maxRetries,
-	}
+	return roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		ctx, cancel := context.WithTimeout(r.Context(), timeout)
+		defer cancel()
+		return base.RoundTrip(r.Clone(ctx))
+	})
 }
 
-func (t retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	transport := t.base
-	if transport == nil {
-		transport = http.DefaultTransport
-	}
+type roundTripperFunc func(*http.Request) (*http.Response, error)
 
-	attempt := 0
-	for {
-		resp, err := transport.RoundTrip(req)
-		if err != nil {
-			return resp, err
-		}
-
-		if resp.StatusCode != http.StatusTooManyRequests {
-			return resp, nil
-		}
-
-		if attempt >= t.maxRetries {
-			return resp, nil
-		}
-
-		if req.Body != nil && req.GetBody == nil {
-			return resp, nil
-		}
-
-		delay := parseRetryAfter(resp.Header.Get("Retry-After"))
-		if delay <= 0 {
-			// Fallback exponential backoff when header missing/invalid.
-			delay = time.Duration(1<<attempt) * time.Second
-			if delay > 30*time.Second {
-				delay = 30 * time.Second
-			}
-		}
-		resp.Body.Close()
-
-		if req.GetBody != nil {
-			newBody, err := req.GetBody()
-			if err != nil {
-				return nil, err
-			}
-			req.Body = newBody
-		}
-
-		if delay > 0 {
-			select {
-			case <-time.After(delay):
-			case <-req.Context().Done():
-				return nil, req.Context().Err()
-			}
-		}
-
-		attempt++
-	}
-}
-
-func parseRetryAfter(v string) time.Duration {
-	if v == "" {
-		return 0
-	}
-
-	if d, err := time.ParseDuration(v); err == nil {
-		return d
-	}
-
-	if secs, err := time.ParseDuration(v + "s"); err == nil {
-		return secs
-	}
-
-	if ts, err := http.ParseTime(v); err == nil {
-		now := time.Now()
-		if ts.After(now) {
-			return ts.Sub(now)
-		}
-	}
-
-	return 0
+func (fn roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return fn(r)
 }
