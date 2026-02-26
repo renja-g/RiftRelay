@@ -59,7 +59,8 @@ The scheduler enforces upstream windows and applies dynamic pacing inside the ac
 
 ### 1) Prerequisites
 
-- Go 1.26+ (matching `go.mod`)
+- Docker + Docker Compose plugin (for image-based setup)
+- Go 1.26+ (only needed for local source execution)
 - A valid Riot API token
 
 ### 2) Run locally
@@ -71,28 +72,36 @@ go run .
 
 Default listen address is `http://localhost:8985`.
 
-### 3) Run with Docker (production profile)
+### 3) Run with Docker image (no clone)
 
 ```bash
-cp .env.example .env
+curl -fsSL "https://raw.githubusercontent.com/renja-g/RiftRelay/main/scripts/setup-docker-stack.sh" | bash
 ```
 
-Set `RIOT_TOKEN` in `.env`, then run:
+The script will:
+
+- download a ready-to-run stack into `./riftrelay-stack`
+- prompt for `RIOT_TOKEN`
+- optionally prompt for `RIFTRELAY_IMAGE`
+- start everything with `docker compose up -d`
+
+Available endpoints:
+
+- RiftRelay API: `http://localhost:8985`
+
+Non-interactive setup example:
 
 ```bash
-docker compose up -d --build
-```
-
-Follow logs:
-
-```bash
-docker compose logs -f riftrelay
+curl -fsSL "https://raw.githubusercontent.com/renja-g/RiftRelay/main/scripts/setup-docker-stack.sh" | \
+  bash -s -- \
+    --token "your-riot-token" \
+    --image "ghcr.io/<org>/riftrelay:latest"
 ```
 
 Stop:
 
 ```bash
-docker compose down
+docker compose -f riftrelay-stack/docker-compose.yml --env-file riftrelay-stack/.env down
 ```
 
 ### 4) Send a request

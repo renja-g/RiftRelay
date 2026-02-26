@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: riftrelay:latest
+    image: ${RIFTRELAY_IMAGE:-renjag/riftrelay:latest}
     restart: unless-stopped
     init: true
     env_file:
