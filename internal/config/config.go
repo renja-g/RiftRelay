@@ -13,7 +13,7 @@ const (
 	defaultPort                   = 8985
 	defaultQueueCapacity          = 2048
 	defaultAdmissionTimeout       = 5 * time.Minute
-	defaultAdditionalWindowSize   = 10 * time.Millisecond
+	defaultAdditionalWindowSize   = 150 * time.Millisecond
 	defaultShutdownTimeout        = 20 * time.Second
 	defaultReadHeaderTimeout      = 10 * time.Second
 	defaultReadTimeout            = 10 * time.Second
