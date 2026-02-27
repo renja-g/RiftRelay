@@ -1,6 +1,6 @@
 # RiftRelay
 
-A high-throughput relay for the Riot API with centralized admission control. Built in Go with with integrated Swagger UI.
+A rate-limiting proxy for the Riot API. Built in Go with integrated Swagger UI.
 
 ## Shoutout
 
