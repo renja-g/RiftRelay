@@ -12,11 +12,11 @@ func TestParsePath(t *testing.T) {
 		wantErr    bool
 	}{
 		{
-			name:       "valid path",
-			input:      "/na1/lol/summoner/v4/summoners/by-name/test",
+			name:       "dynamic path uses canonical pattern bucket",
+			input:      "/na1/lol/summoner/v4/summoners/by-puuid/test-puuid",
 			wantRegion: "na1",
-			wantPath:   "/lol/summoner/v4/summoners/by-name/test",
-			wantBucket: "na1:lol/summoner/v4/summoners/by-name/test",
+			wantPath:   "/lol/summoner/v4/summoners/by-puuid/test-puuid",
+			wantBucket: "na1:lol/summoner/v4/summoners/by-puuid/{encryptedPUUID}",
 		},
 		{
 			name:       "region is normalized to lower-case",
@@ -24,6 +24,13 @@ func TestParsePath(t *testing.T) {
 			wantRegion: "euw1",
 			wantPath:   "/lol/status/v4/platform-data",
 			wantBucket: "euw1:lol/status/v4/platform-data",
+		},
+		{
+			name:       "unknown path falls back to concrete upstream path",
+			input:      "/na1/lol/summoner/v4/summoners/by-name/test",
+			wantRegion: "na1",
+			wantPath:   "/lol/summoner/v4/summoners/by-name/test",
+			wantBucket: "na1:lol/summoner/v4/summoners/by-name/test",
 		},
 		{
 			name:    "missing route part",

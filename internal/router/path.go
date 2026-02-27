@@ -7,6 +7,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 type PathInfo struct {
@@ -16,6 +17,17 @@ type PathInfo struct {
 }
 
 var regionPattern = regexp.MustCompile(`^[a-z0-9-]+$`)
+
+type pathPatternNode struct {
+	pattern  string
+	children map[string]*pathPatternNode
+	wildcard *pathPatternNode
+}
+
+var (
+	pathPatternRoot     *pathPatternNode
+	pathPatternRootOnce sync.Once
+)
 
 type pathContextKey struct{}
 
@@ -42,11 +54,77 @@ func ParsePath(rawPath string) (PathInfo, error) {
 		return PathInfo{}, fmt.Errorf("missing upstream path")
 	}
 
+	pattern := matchPathPattern(upstreamPath)
+	bucketPath := upstreamPath
+	if pattern != "" {
+		bucketPath = pattern
+	}
+
 	return PathInfo{
 		Region:       region,
 		UpstreamPath: upstreamPath,
-		Bucket:       region + ":" + strings.TrimPrefix(upstreamPath, "/"),
+		Bucket:       region + ":" + strings.TrimPrefix(bucketPath, "/"),
 	}, nil
+}
+
+func ensurePathPatternRoot() {
+	pathPatternRootOnce.Do(func() {
+		pathPatternRoot = &pathPatternNode{children: make(map[string]*pathPatternNode)}
+		for _, p := range PathPatterns {
+			insertPathPattern(p)
+		}
+	})
+}
+
+func insertPathPattern(pattern string) {
+	current := pathPatternRoot
+	cleanPattern := strings.TrimPrefix(pattern, "/")
+	segments := strings.Split(cleanPattern, "/")
+
+	for _, segment := range segments {
+		isWildcard := strings.HasPrefix(segment, "{") && strings.HasSuffix(segment, "}")
+		if isWildcard {
+			if current.wildcard == nil {
+				current.wildcard = &pathPatternNode{children: make(map[string]*pathPatternNode)}
+			}
+			current = current.wildcard
+			continue
+		}
+
+		if current.children[segment] == nil {
+			current.children[segment] = &pathPatternNode{children: make(map[string]*pathPatternNode)}
+		}
+		current = current.children[segment]
+	}
+
+	current.pattern = pattern
+}
+
+func matchPathPattern(upstreamPath string) string {
+	ensurePathPatternRoot()
+
+	current := pathPatternRoot
+	pathWithoutPrefix := strings.TrimPrefix(upstreamPath, "/")
+	if pathWithoutPrefix == "" {
+		return ""
+	}
+
+	start := 0
+	for i := 0; i <= len(pathWithoutPrefix); i++ {
+		if i == len(pathWithoutPrefix) || pathWithoutPrefix[i] == '/' {
+			segment := pathWithoutPrefix[start:i]
+			if next, ok := current.children[segment]; ok {
+				current = next
+			} else if current.wildcard != nil {
+				current = current.wildcard
+			} else {
+				return ""
+			}
+			start = i + 1
+		}
+	}
+
+	return current.pattern
 }
 
 // WithPath stores PathInfo in the request context.
