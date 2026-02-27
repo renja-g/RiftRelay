@@ -139,6 +139,7 @@ echo
 echo "RiftRelay stack ready in: $TARGET_DIR"
 if [ "$AUTO_UP" = "true" ]; then
   echo "RiftRelay:   http://localhost:8985"
+  echo "Swagger UI:  http://localhost:8985/swagger/"
   echo
   echo "Tail logs:"
   echo "  docker compose -f \"$TARGET_DIR/docker-compose.yml\" --env-file \"$TARGET_DIR/.env\" logs -f riftrelay"
