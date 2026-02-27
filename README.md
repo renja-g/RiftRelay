@@ -46,6 +46,10 @@ curl -H "X-Priority: high" "http://localhost:8985/europe/riot/account/v1/account
 
 You can also explore and send API requests through the Swagger UI at `http://localhost:8985/swagger/` (enabled by default).
 
+<img width="1440" height="783" alt="image" src="https://github.com/user-attachments/assets/4dc41b61-1cc7-419e-80c6-0c93cf213f0d" />
+
+
+
 ## Configuration
 
 Set `RIOT_TOKEN` (required). Multiple tokens are supported as comma separated values:
