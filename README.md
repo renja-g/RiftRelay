@@ -2,6 +2,10 @@
 
 A high-throughput relay for the Riot API with centralized admission control. Built in Go with with integrated Swagger UI.
 
+## Shoutout
+
+Big shoutout to [DarkIntaqt](https://github.com/DarkIntaqt) and [cosmic-radiance](https://github.com/DarkIntaqt/cosmic-radiance): we originally planned to build it together, but after we both lost interest for a while and didn't make any progress, he built it solo. His project inspired me to come back to this idea and build RiftRelay.
+
 ## What it does
 
 RiftRelay sits between your application and Riot's API, managing rate limits intelligently so you don't have to. By default it will spread requests evenly across the remaining rate limit window. If you need to send requests with higher priority, you can add the `X-Priority: high` header to bypass the pacing delay but still respect the rate limit.
