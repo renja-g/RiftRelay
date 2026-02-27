@@ -82,9 +82,11 @@ func (l *Limiter) Close() error {
 }
 
 func (l *Limiter) loop() {
+	defaultAppWindows := rateLimitsToWindows(l.cfg.DefaultAppLimits, l.cfg.AdditionalWindow)
+
 	keys := make([]keyState, l.cfg.KeyCount)
 	for i := range keys {
-		keys[i] = newKeyState()
+		keys[i] = newKeyState(defaultAppWindows)
 	}
 
 	buckets := make(map[string]*bucketQueue)
@@ -314,4 +316,17 @@ func maxDuration(a, b time.Duration) time.Duration {
 		return a
 	}
 	return b
+}
+
+func rateLimitsToWindows(limits []RateLimit, additional time.Duration) []limitWindow {
+	ws := make([]limitWindow, 0, len(limits))
+	for _, rl := range limits {
+		if rl.Requests > 0 && rl.Window > 0 {
+			ws = append(ws, limitWindow{
+				limit:  rl.Requests,
+				window: rl.Window + additional,
+			})
+		}
+	}
+	return ws
 }

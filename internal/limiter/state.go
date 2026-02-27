@@ -135,14 +135,16 @@ func (s *rateState) apply(
 }
 
 type keyState struct {
-	appByRegion    map[string]*rateState
-	methodByBucket map[string]*rateState
+	appByRegion        map[string]*rateState
+	methodByBucket     map[string]*rateState
+	defaultAppWindows  []limitWindow
 }
 
-func newKeyState() keyState {
+func newKeyState(defaultAppWindows []limitWindow) keyState {
 	return keyState{
-		appByRegion:    make(map[string]*rateState),
-		methodByBucket: make(map[string]*rateState),
+		appByRegion:       make(map[string]*rateState),
+		methodByBucket:    make(map[string]*rateState),
+		defaultAppWindows: defaultAppWindows,
 	}
 }
 
@@ -151,7 +153,7 @@ func (k *keyState) app(region string) *rateState {
 	if ok {
 		return state
 	}
-	state = &rateState{}
+	state = &rateState{windows: cloneWindows(k.defaultAppWindows)}
 	k.appByRegion[region] = state
 	return state
 }
@@ -164,4 +166,13 @@ func (k *keyState) method(bucket string) *rateState {
 	state = &rateState{}
 	k.methodByBucket[bucket] = state
 	return state
+}
+
+func cloneWindows(ws []limitWindow) []limitWindow {
+	if len(ws) == 0 {
+		return nil
+	}
+	clone := make([]limitWindow, len(ws))
+	copy(clone, ws)
+	return clone
 }

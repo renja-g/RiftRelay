@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/pprof"
+	"time"
 
 	"github.com/renja-g/RiftRelay/internal/config"
 	"github.com/renja-g/RiftRelay/internal/limiter"
@@ -31,6 +32,10 @@ func New(cfg config.Config) (*Server, error) {
 		KeyCount:         len(cfg.Tokens),
 		QueueCapacity:    cfg.QueueCapacity,
 		AdditionalWindow: cfg.AdditionalWindow,
+		DefaultAppLimits: []limiter.RateLimit{
+			{Requests: 20, Window: 1 * time.Second},
+			{Requests: 100, Window: 2 * time.Minute},
+		},
 	}
 	if collector != nil {
 		limiterCfg.Metrics = collector

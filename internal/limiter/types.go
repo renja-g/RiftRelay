@@ -40,10 +40,16 @@ type MetricsSink interface {
 	ObserveAdmission(wait time.Duration, outcome string)
 }
 
+type RateLimit struct {
+	Requests int
+	Window   time.Duration
+}
+
 type Config struct {
 	KeyCount         int
 	QueueCapacity    int
 	AdditionalWindow time.Duration
+	DefaultAppLimits []RateLimit
 	Clock            Clock
 	Metrics          MetricsSink
 }

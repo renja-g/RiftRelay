@@ -2,6 +2,7 @@ package limiter
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -579,6 +580,98 @@ func TestLimiterHighPriorityCutsInFrontOfQueuedNormals(t *testing.T) {
 			return
 		case <-timeout:
 			t.Fatalf("timed out waiting for first successful admission")
+		}
+	}
+}
+
+func TestLimiterColdStartDefaultLimitsPaceRequests(t *testing.T) {
+	// Verify that default app limits pace requests even before any observation is received.
+	l, err := New(Config{
+		KeyCount:      1,
+		QueueCapacity: 64,
+		DefaultAppLimits: []RateLimit{
+			{Requests: 3, Window: 1 * time.Second},
+		},
+	})
+	if err != nil {
+		t.Fatalf("new limiter: %v", err)
+	}
+	defer l.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	admit := func(label string) {
+		if _, err := l.Admit(ctx, Admission{
+			Region:   "na1",
+			Bucket:   "na1:lol/status/v4/platform-data",
+			Priority: PriorityNormal,
+		}); err != nil {
+			t.Fatalf("%s admit failed: %v", label, err)
+		}
+	}
+
+	// Admit 4 requests with no prior observation. With a 3 req/1s default app
+	// limit, the 4th request must wait for the window to reset, so the total
+	// elapsed time must be >= 1 second.
+	start := time.Now()
+	admit("first")
+	admit("second")
+	admit("third")
+	admit("fourth") // must wait for the 1-second window to reset
+	elapsed := time.Since(start)
+
+	if elapsed < 700*time.Millisecond {
+		t.Fatalf("expected cold-start default limits to pace 4 requests over >=700ms; elapsed=%s", elapsed)
+	}
+}
+
+func TestLimiterColdStartDefaultLimitsOverriddenByObservation(t *testing.T) {
+	// Default limits should be replaced by actual observed limits once an observation arrives.
+	l, err := New(Config{
+		KeyCount:      1,
+		QueueCapacity: 64,
+		DefaultAppLimits: []RateLimit{
+			{Requests: 2, Window: 1 * time.Second},
+		},
+	})
+	if err != nil {
+		t.Fatalf("new limiter: %v", err)
+	}
+	defer l.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	admit := func(label string) {
+		if _, err := l.Admit(ctx, Admission{
+			Region:   "na1",
+			Bucket:   "na1:lol/status/v4/platform-data",
+			Priority: PriorityNormal,
+		}); err != nil {
+			t.Fatalf("%s admit failed: %v", label, err)
+		}
+	}
+
+	// Seed an observation with a wider limit so the default is superseded.
+	headers := make(http.Header)
+	headers.Set("X-App-Rate-Limit", "10:1")
+	headers.Set("X-App-Rate-Limit-Count", "1:1")
+	l.Observe(Observation{
+		Region:     "na1",
+		Bucket:     "na1:lol/status/v4/platform-data",
+		KeyIndex:   0,
+		StatusCode: http.StatusOK,
+		Header:     headers,
+	})
+	time.Sleep(20 * time.Millisecond)
+
+	// With limit=10/1s we should be able to admit more than 2 requests quickly.
+	for i := range 8 {
+		start := time.Now()
+		admit(fmt.Sprintf("req-%d", i+2))
+		if elapsed := time.Since(start); elapsed > 200*time.Millisecond {
+			t.Fatalf("request %d was unexpectedly delayed by %s (default limit should be overridden)", i+2, elapsed)
 		}
 	}
 }
