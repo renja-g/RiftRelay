@@ -83,8 +83,9 @@ func (l *Limiter) Close() error {
 
 func (l *Limiter) loop() {
 	keys := make([]keyState, l.cfg.KeyCount)
+	defaultApp := parseRateHeader(l.cfg.DefaultAppLimits, "")
 	for i := range keys {
-		keys[i] = newKeyState()
+		keys[i] = newKeyState(defaultApp)
 	}
 
 	buckets := make(map[string]*bucketQueue)
@@ -206,8 +207,8 @@ func (l *Limiter) handleObservation(
 	appLimits := parseRateHeader(obs.Header.Get("X-App-Rate-Limit"), obs.Header.Get("X-App-Rate-Limit-Count"))
 	methodLimits := parseRateHeader(obs.Header.Get("X-Method-Rate-Limit"), obs.Header.Get("X-Method-Rate-Limit-Count"))
 
-	key.app(obs.Region).apply(appLimits, retryAfter, applyAppRetry, now, l.cfg.AdditionalWindow)
-	key.method(obs.Bucket).apply(methodLimits, retryAfter, applyMethodRetry, now, l.cfg.AdditionalWindow)
+	key.app(obs.Region, now, l.cfg.AdditionalWindow).apply(appLimits, retryAfter, applyAppRetry, now, l.cfg.AdditionalWindow)
+	key.method(obs.Bucket, now, l.cfg.AdditionalWindow).apply(methodLimits, retryAfter, applyMethodRetry, now, l.cfg.AdditionalWindow)
 
 	// An app-limit update can unblock or block multiple buckets in the same region.
 	for _, bucket := range buckets {
@@ -251,7 +252,7 @@ func (l *Limiter) dispatch(bucket *bucketQueue, keys []keyState, wakeups *wakeHe
 		}
 
 		key := &keys[keyIndex]
-		if !key.app(bucket.region).consume(now) || !key.method(bucket.bucket).consume(now) {
+		if !key.app(bucket.region, now, l.cfg.AdditionalWindow).consume(now) || !key.method(bucket.bucket, now, l.cfg.AdditionalWindow).consume(now) {
 			upsertWake(wakeups, bucket, now.Add(5*time.Millisecond))
 			// Put request back and retry at next wake-up.
 			if req.admission.Priority == PriorityHigh {
@@ -277,8 +278,8 @@ func (l *Limiter) pickKey(now time.Time, keys []keyState, region, bucket string,
 
 	for i := range keys {
 		key := &keys[i]
-		appAt := key.app(region).nextAllowed(now, bypassPacing)
-		methodAt := key.method(bucket).nextAllowed(now, bypassPacing)
+		appAt := key.app(region, now, l.cfg.AdditionalWindow).nextAllowed(now, bypassPacing)
+		methodAt := key.method(bucket, now, l.cfg.AdditionalWindow).nextAllowed(now, bypassPacing)
 		readyAt := appAt
 		if methodAt.After(readyAt) {
 			readyAt = methodAt

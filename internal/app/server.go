@@ -31,6 +31,7 @@ func New(cfg config.Config) (*Server, error) {
 		KeyCount:         len(cfg.Tokens),
 		QueueCapacity:    cfg.QueueCapacity,
 		AdditionalWindow: cfg.AdditionalWindow,
+		DefaultAppLimits: cfg.DefaultAppLimits,
 	}
 	if collector != nil {
 		limiterCfg.Metrics = collector

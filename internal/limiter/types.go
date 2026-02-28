@@ -46,6 +46,7 @@ type Config struct {
 	AdditionalWindow time.Duration
 	Clock            Clock
 	Metrics          MetricsSink
+	DefaultAppLimits string
 }
 
 type RejectedError struct {
