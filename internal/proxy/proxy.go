@@ -61,6 +61,7 @@ func New(cfg config.Config, opts ...Option) http.Handler {
 	}
 
 	o.baseTransport = transport.WithRequestTimeout(o.baseTransport, cfg.UpstreamTimeout)
+	o.baseTransport = transport.WithRetryAfter429(o.baseTransport, 3)
 
 	rp := newReverseProxy(o)
 	handler := http.Handler(rp)
