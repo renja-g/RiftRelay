@@ -33,6 +33,7 @@ const (
 	defaultEnablePprof            = false
 	defaultEnableSwagger          = true
 	defaultUpstreamRequestTimeout = 0
+	defaultAppRateLimit           = "20:1,100:120"
 )
 
 type Config struct {
@@ -46,6 +47,7 @@ type Config struct {
 	PprofEnabled      bool
 	SwaggerEnabled    bool
 	UpstreamTimeout   time.Duration
+	DefaultAppLimits  string
 	Server            ServerConfig
 	UpstreamTransport UpstreamTransportConfig
 }
@@ -83,6 +85,7 @@ func Load() (Config, error) {
 		PprofEnabled:     defaultEnablePprof,
 		SwaggerEnabled:   defaultEnableSwagger,
 		UpstreamTimeout:  defaultUpstreamRequestTimeout,
+		DefaultAppLimits: defaultAppRateLimit,
 		Server: ServerConfig{
 			ReadHeaderTimeout: defaultReadHeaderTimeout,
 			ReadTimeout:       defaultReadTimeout,
@@ -120,6 +123,8 @@ func Load() (Config, error) {
 	mustParseBool("ENABLE_METRICS", &cfg.MetricsEnabled, &errs)
 	mustParseBool("ENABLE_PPROF", &cfg.PprofEnabled, &errs)
 	mustParseBool("ENABLE_SWAGGER", &cfg.SwaggerEnabled, &errs)
+
+	mustParseRateLimit("DEFAULT_APP_RATE_LIMIT", &cfg.DefaultAppLimits, &errs)
 
 	mustParseDuration("SERVER_READ_HEADER_TIMEOUT", &cfg.Server.ReadHeaderTimeout, &errs)
 	mustParseDuration("SERVER_READ_TIMEOUT", &cfg.Server.ReadTimeout, &errs)
@@ -213,4 +218,31 @@ func mustParseBool(key string, dst *bool, errs *[]error) {
 		return
 	}
 	*dst = parsed
+}
+
+func mustParseRateLimit(key string, dst *string, errs *[]error) {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return
+	}
+
+	parts := strings.Split(value, ",")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		pair := strings.SplitN(part, ":", 2)
+		if len(pair) != 2 {
+			*errs = append(*errs, fmt.Errorf("%s must be in format 'limit:window,limit:window' (e.g., '20:1,100:120'): %s", key, part))
+			return
+		}
+		limit, err1 := strconv.Atoi(strings.TrimSpace(pair[0]))
+		window, err2 := strconv.Atoi(strings.TrimSpace(pair[1]))
+		if err1 != nil || err2 != nil || limit <= 0 || window <= 0 {
+			*errs = append(*errs, fmt.Errorf("%s contains invalid values (must be positive integers): %s", key, part))
+			return
+		}
+	}
+	*dst = value
 }

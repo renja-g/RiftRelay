@@ -135,28 +135,31 @@ func (s *rateState) apply(
 }
 
 type keyState struct {
-	appByRegion    map[string]*rateState
-	methodByBucket map[string]*rateState
+	appByRegion      map[string]*rateState
+	methodByBucket   map[string]*rateState
+	defaultAppLimits []parsedWindow
 }
 
-func newKeyState() keyState {
+func newKeyState(defaultAppLimits []parsedWindow) keyState {
 	return keyState{
-		appByRegion:    make(map[string]*rateState),
-		methodByBucket: make(map[string]*rateState),
+		appByRegion:      make(map[string]*rateState),
+		methodByBucket:   make(map[string]*rateState),
+		defaultAppLimits: defaultAppLimits,
 	}
 }
 
-func (k *keyState) app(region string) *rateState {
+func (k *keyState) app(region string, now time.Time, additionalWindow time.Duration) *rateState {
 	state, ok := k.appByRegion[region]
 	if ok {
 		return state
 	}
 	state = &rateState{}
+	state.apply(k.defaultAppLimits, nil, false, now, additionalWindow)
 	k.appByRegion[region] = state
 	return state
 }
 
-func (k *keyState) method(bucket string) *rateState {
+func (k *keyState) method(bucket string, now time.Time, additionalWindow time.Duration) *rateState {
 	state, ok := k.methodByBucket[bucket]
 	if ok {
 		return state

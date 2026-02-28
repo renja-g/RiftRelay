@@ -181,10 +181,10 @@ func TestHandlerServeOpenAPISpec(t *testing.T) {
 		testSpec := map[string]any{
 			"openapi": "3.0.0",
 			"info": map[string]any{
-				"title":       "Riot API",
-				"description": originalDesc,
+				"title":          "Riot API",
+				"description":    originalDesc,
 				"termsOfService": "https://developer.riotgames.com/terms",
-				"version":     "test",
+				"version":        "test",
 			},
 		}
 		specJSON, _ := json.Marshal(testSpec)

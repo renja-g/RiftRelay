@@ -2,6 +2,7 @@ package limiter
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -511,6 +512,112 @@ func TestLimiterPriorityBurstSlowsLaterNormalPacing(t *testing.T) {
 			normalSecondWait,
 			highSecondWait,
 		)
+	}
+}
+
+func TestDefaultRateLimitsAppliedBeforeObservation(t *testing.T) {
+	l, err := New(Config{
+		KeyCount:         1,
+		QueueCapacity:    8,
+		AdditionalWindow: 0,
+		DefaultAppLimits: "20:1,100:120",
+	})
+	if err != nil {
+		t.Fatalf("new limiter: %v", err)
+	}
+	defer l.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	start := time.Now()
+	if _, err := l.Admit(ctx, Admission{
+		Region:   "europe",
+		Bucket:   "europe:riot/account/v1/accounts/by-riot-id/test/123",
+		Priority: PriorityNormal,
+	}); err != nil {
+		t.Fatalf("first admit failed: %v", err)
+	}
+	firstDuration := time.Since(start)
+
+	start = time.Now()
+	if _, err := l.Admit(ctx, Admission{
+		Region:   "europe",
+		Bucket:   "europe:riot/account/v1/accounts/by-riot-id/test/456",
+		Priority: PriorityNormal,
+	}); err != nil {
+		t.Fatalf("second admit failed: %v", err)
+	}
+	secondWait := time.Since(start)
+
+	if firstDuration > 10*time.Millisecond {
+		t.Logf("first request took %s, expected near-instant", firstDuration)
+	}
+
+	if secondWait < 20*time.Millisecond {
+		t.Fatalf("second request was not paced by default limits: wait=%s (expected >20ms)", secondWait)
+	}
+}
+
+func TestDefaultRateLimitsPreventBurstOnStartup(t *testing.T) {
+	l, err := New(Config{
+		KeyCount:         1,
+		QueueCapacity:    16,
+		AdditionalWindow: 0,
+		DefaultAppLimits: "20:1",
+	})
+	if err != nil {
+		t.Fatalf("new limiter: %v", err)
+	}
+	defer l.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	const numRequests = 10
+	type result struct {
+		idx  int
+		err  error
+		wait time.Duration
+	}
+	results := make(chan result, numRequests)
+
+	start := time.Now()
+	for i := 0; i < numRequests; i++ {
+		go func(idx int) {
+			reqStart := time.Now()
+			_, err := l.Admit(ctx, Admission{
+				Region:   "europe",
+				Bucket:   fmt.Sprintf("europe:riot/account/v1/accounts/by-riot-id/test/%d", idx),
+				Priority: PriorityNormal,
+			})
+			results <- result{idx: idx, err: err, wait: time.Since(reqStart)}
+		}(i)
+	}
+
+	successCount := 0
+	var lastCompletion time.Duration
+	for i := 0; i < numRequests; i++ {
+		r := <-results
+		if r.err != nil {
+			t.Logf("request %d failed: %v", r.idx, r.err)
+			continue
+		}
+		successCount++
+		if r.wait > lastCompletion {
+			lastCompletion = r.wait
+		}
+	}
+
+	totalDuration := time.Since(start)
+
+	if successCount != numRequests {
+		t.Fatalf("expected %d successful requests, got %d", numRequests, successCount)
+	}
+
+	minExpectedDuration := 200 * time.Millisecond
+	if totalDuration < minExpectedDuration {
+		t.Fatalf("requests were not paced by default limits: total=%s (expected >%s)", totalDuration, minExpectedDuration)
 	}
 }
 
