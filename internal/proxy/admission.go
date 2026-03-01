@@ -66,7 +66,17 @@ func admissionMiddleware(
 
 			if err != nil {
 				if m != nil {
-					m.ObserveAdmissionResult("rejected")
+					reason := "rejected"
+					if rejected, ok := err.(*limiter.RejectedError); ok {
+						if rejected.Reason == "shutting_down" {
+							reason = "shutting_down"
+						} else {
+							reason = "rejected_" + rejected.Reason
+						}
+					} else if err == context.DeadlineExceeded || err == context.Canceled {
+						reason = "rejected_timeout"
+					}
+					m.ObserveAdmissionResult(reason)
 					m.ObserveQueueWait(info.Bucket, priority, waitDuration)
 				}
 				log.Printf("admission_reject region=%s bucket=%s priority=%s err=%v", info.Region, info.Bucket, priorityString(priority), err)

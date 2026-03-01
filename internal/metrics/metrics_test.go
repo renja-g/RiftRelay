@@ -16,7 +16,8 @@ func TestMetricsOutput(t *testing.T) {
 	// Simulate some metrics
 	c.ObserveQueueDepth("europe:test:bucket", limiter.PriorityHigh, 5)
 	c.ObserveQueueDepth("europe:test:bucket", limiter.PriorityNormal, 3)
-	c.ObserveAdmission(time.Millisecond*50, "allowed")
+	c.ObserveQueueWait("europe:test:bucket", limiter.PriorityNormal, time.Millisecond*50)
+	c.ObserveAdmissionResult("allowed")
 	c.ObserveAdmissionResult("rejected_queue_full")
 	c.ObserveUpstream(200, time.Millisecond*100)
 	c.ObserveUpstreamDuration("europe", "test:bucket", time.Millisecond*100)
@@ -40,10 +41,10 @@ func TestMetricsOutput(t *testing.T) {
 		"riftrelay_admission_total",
 		"riftrelay_queue_depth",
 		"riftrelay_upstream_responses_total",
-		"riftrelay_queue_wait_seconds",    // Histogram with observations
+		"riftrelay_queue_wait_seconds",        // Histogram with observations
 		"riftrelay_upstream_duration_seconds", // Histogram with observations
-		"go_goroutines",  // Go runtime metrics
-		"process_resident_memory_bytes", // Process metrics
+		"go_goroutines",                       // Go runtime metrics
+		"process_resident_memory_bytes",       // Process metrics
 	}
 
 	for _, metric := range expectedMetrics {
