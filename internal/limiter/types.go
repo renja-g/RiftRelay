@@ -37,7 +37,6 @@ type Clock interface {
 
 type MetricsSink interface {
 	ObserveQueueDepth(bucket string, priority Priority, depth int)
-	ObserveAdmission(wait time.Duration, outcome string)
 }
 
 type Config struct {

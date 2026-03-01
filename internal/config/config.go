@@ -29,7 +29,7 @@ const (
 	defaultDialKeepAlive          = 30 * time.Second
 	defaultResponseHeaderTimeout  = 15 * time.Second
 	defaultForceAttemptHTTP2      = true
-	defaultEnableMetrics          = false
+	defaultEnableMetrics          = true
 	defaultEnablePprof            = false
 	defaultEnableSwagger          = true
 	defaultUpstreamRequestTimeout = 0
