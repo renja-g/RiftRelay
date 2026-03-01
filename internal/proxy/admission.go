@@ -17,7 +17,6 @@ type admissionContext struct {
 	Region    string
 	Bucket    string
 	KeyIndex  int
-	Priority  limiter.Priority
 	StartedAt time.Time
 }
 
@@ -92,7 +91,6 @@ func admissionMiddleware(
 				Region:    info.Region,
 				Bucket:    info.Bucket,
 				KeyIndex:  ticket.KeyIndex,
-				Priority:  priority,
 				StartedAt: start,
 			})
 			next.ServeHTTP(w, r.WithContext(ctx))
