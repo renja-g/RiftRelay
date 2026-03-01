@@ -140,6 +140,15 @@ func newReverseProxy(o options) *httputil.ReverseProxy {
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			log.Printf("proxy error: %v", err)
+			if info, ok := admissionFromContext(r.Context()); ok && o.limiter != nil {
+				o.limiter.Observe(limiter.Observation{
+					Region:     info.Region,
+					Bucket:     info.Bucket,
+					KeyIndex:   info.KeyIndex,
+					StatusCode: http.StatusBadGateway,
+					Header:     http.Header{},
+				})
+			}
 			if o.metrics != nil {
 				o.metrics.ObserveUpstream(http.StatusBadGateway, 0)
 			}
