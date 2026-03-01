@@ -17,6 +17,7 @@ type admissionContext struct {
 	Region    string
 	Bucket    string
 	KeyIndex  int
+	Priority  limiter.Priority
 	StartedAt time.Time
 }
 
@@ -56,18 +57,18 @@ func admissionMiddleware(
 			}
 			defer cancel()
 
-			start := time.Time{}
-			if m != nil {
-				start = time.Now()
-			}
+			start := time.Now()
 			ticket, err := l.Admit(admitCtx, limiter.Admission{
 				Region:   info.Region,
 				Bucket:   info.Bucket,
 				Priority: priority,
 			})
+			waitDuration := time.Since(start)
+
 			if err != nil {
 				if m != nil {
 					m.ObserveAdmissionResult("rejected")
+					m.ObserveQueueWait(info.Bucket, priority, waitDuration)
 				}
 				log.Printf("admission_reject region=%s bucket=%s priority=%s err=%v", info.Region, info.Bucket, priorityString(priority), err)
 
@@ -82,7 +83,7 @@ func admissionMiddleware(
 			}
 
 			if m != nil {
-				m.ObserveAdmissionWait(time.Since(start))
+				m.ObserveQueueWait(info.Bucket, priority, waitDuration)
 				m.ObserveAdmissionResult("allowed")
 			}
 
@@ -91,6 +92,7 @@ func admissionMiddleware(
 				Region:    info.Region,
 				Bucket:    info.Bucket,
 				KeyIndex:  ticket.KeyIndex,
+				Priority:  priority,
 				StartedAt: start,
 			})
 			next.ServeHTTP(w, r.WithContext(ctx))

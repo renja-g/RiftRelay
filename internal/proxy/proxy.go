@@ -134,7 +134,9 @@ func newReverseProxy(o options) *httputil.ReverseProxy {
 			})
 
 			if o.metrics != nil {
-				o.metrics.ObserveUpstream(resp.StatusCode, time.Since(info.StartedAt))
+				duration := time.Since(info.StartedAt)
+				o.metrics.ObserveUpstream(resp.StatusCode, duration)
+				o.metrics.ObserveUpstreamDuration(info.Region, info.Bucket, duration)
 			}
 			return nil
 		},
