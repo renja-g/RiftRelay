@@ -689,3 +689,103 @@ func TestLimiterHighPriorityCutsInFrontOfQueuedNormals(t *testing.T) {
 		}
 	}
 }
+
+func TestLimiterRecoveryAfterBurst(t *testing.T) {
+	const burstSize = 200
+
+	l, err := New(Config{
+		KeyCount:         1,
+		QueueCapacity:    burstSize + 16,
+		AdditionalWindow: 0,
+		DefaultAppLimits: "20:1",
+	})
+	if err != nil {
+		t.Fatalf("new limiter: %v", err)
+	}
+	defer l.Close()
+
+	// Seed with initial observation so method limits are established.
+	seed := make(http.Header)
+	seed.Set("X-Method-Rate-Limit", "20:1")
+	seed.Set("X-Method-Rate-Limit-Count", "0:1")
+	seed.Set("X-App-Rate-Limit", "20:1")
+	seed.Set("X-App-Rate-Limit-Count", "0:1")
+	l.Observe(Observation{
+		Region:     "europe",
+		Bucket:     "europe:riot/account/v1/accounts/by-riot-id/test/123",
+		KeyIndex:   0,
+		StatusCode: http.StatusOK,
+		Header:     seed,
+	})
+	time.Sleep(30 * time.Millisecond)
+
+	// Fire burst of high-priority requests.
+	type burstResult struct {
+		ticket Ticket
+		err    error
+	}
+	results := make(chan burstResult, burstSize)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	for i := 0; i < burstSize; i++ {
+		go func() {
+			ticket, err := l.Admit(ctx, Admission{
+				Region:   "europe",
+				Bucket:   "europe:riot/account/v1/accounts/by-riot-id/test/123",
+				Priority: PriorityHigh,
+			})
+			results <- burstResult{ticket: ticket, err: err}
+		}()
+	}
+
+	// Collect admitted requests and feed observations back (simulating upstream responses).
+	admitted := 0
+	for i := 0; i < burstSize; i++ {
+		select {
+		case r := <-results:
+			if r.err != nil {
+				continue
+			}
+			admitted++
+			// Feed observation back with realistic headers.
+			obs := make(http.Header)
+			obs.Set("X-Method-Rate-Limit", "20:1")
+			obs.Set("X-Method-Rate-Limit-Count", fmt.Sprintf("%d:1", (admitted%20)+1))
+			obs.Set("X-App-Rate-Limit", "20:1")
+			obs.Set("X-App-Rate-Limit-Count", fmt.Sprintf("%d:1", (admitted%20)+1))
+			l.Observe(Observation{
+				Region:     "europe",
+				Bucket:     "europe:riot/account/v1/accounts/by-riot-id/test/123",
+				KeyIndex:   r.ticket.KeyIndex,
+				StatusCode: http.StatusOK,
+				Header:     obs,
+			})
+		case <-time.After(25 * time.Second):
+			t.Fatalf("timed out collecting burst results (got %d/%d)", admitted, burstSize)
+		}
+	}
+
+	if admitted == 0 {
+		t.Fatalf("no requests were admitted from the burst")
+	}
+	t.Logf("burst: %d/%d admitted", admitted, burstSize)
+
+	// The critical check: after the burst, a normal-priority request should be
+	// admitted within a reasonable time (not minutes).
+	normalCtx, normalCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer normalCancel()
+
+	start := time.Now()
+	_, err = l.Admit(normalCtx, Admission{
+		Region:   "europe",
+		Bucket:   "europe:riot/account/v1/accounts/by-riot-id/test/123",
+		Priority: PriorityNormal,
+	})
+	waited := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("normal request after burst failed (waited %s): %v", waited, err)
+	}
+	t.Logf("normal request after burst admitted in %s", waited)
+}

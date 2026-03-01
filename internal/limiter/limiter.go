@@ -32,7 +32,7 @@ func New(cfg Config) (*Limiter, error) {
 	l := &Limiter{
 		cfg:       cfg,
 		admitCh:   make(chan *admitRequest),
-		observeCh: make(chan Observation, 256),
+		observeCh: make(chan Observation, 4096),
 		closeCh:   make(chan chan struct{}),
 	}
 	go l.loop()
@@ -67,11 +67,7 @@ func (l *Limiter) Admit(ctx context.Context, admission Admission) (Ticket, error
 }
 
 func (l *Limiter) Observe(observation Observation) {
-	select {
-	case l.observeCh <- observation:
-	default:
-		// Drop burst observations when downstream is saturated. Admission logic still converges with future updates.
-	}
+	l.observeCh <- observation
 }
 
 func (l *Limiter) Close() error {
@@ -111,6 +107,8 @@ func (l *Limiter) loop() {
 			l.handleAdmit(req, keys, buckets, &wakeups)
 		case obs := <-l.observeCh:
 			l.handleObservation(obs, keys, buckets, &wakeups)
+			// Drain all pending observations before re-entering select.
+			l.drainObservations(keys, buckets, &wakeups)
 		case <-timer.C:
 			now := l.cfg.Clock.Now()
 			for len(wakeups) > 0 {
@@ -214,6 +212,21 @@ func (l *Limiter) handleObservation(
 	for _, bucket := range buckets {
 		if bucket.region == obs.Region {
 			l.dispatch(bucket, keys, wakeups)
+		}
+	}
+}
+
+func (l *Limiter) drainObservations(
+	keys []keyState,
+	buckets map[string]*bucketQueue,
+	wakeups *wakeHeap,
+) {
+	for {
+		select {
+		case obs := <-l.observeCh:
+			l.handleObservation(obs, keys, buckets, wakeups)
+		default:
+			return
 		}
 	}
 }
