@@ -109,7 +109,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "rate(riftrelay_http_requests_total[1m])",
+          "expr": "sum(rate(riftrelay_http_requests_total{priority=~\"$priority\"}[1m]))",
           "legendFormat": "RPS",
           "range": true,
           "refId": "A"
@@ -200,7 +200,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "riftrelay_http_inflight",
+          "expr": "sum(riftrelay_http_inflight{priority=~\"$priority\"})",
           "legendFormat": "Current requests",
           "range": true,
           "refId": "A"
@@ -292,7 +292,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum(rate(riftrelay_request_duration_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(riftrelay_request_duration_seconds_bucket{priority=~\"$priority\"}[1m])) by (le))",
           "legendFormat": "P99",
           "range": true,
           "refId": "A"
@@ -303,7 +303,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(riftrelay_request_duration_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(riftrelay_request_duration_seconds_bucket{priority=~\"$priority\"}[1m])) by (le))",
           "hide": false,
           "legendFormat": "P95",
           "range": true,
@@ -315,7 +315,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(rate(riftrelay_request_duration_seconds_bucket[1m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(riftrelay_request_duration_seconds_bucket{priority=~\"$priority\"}[1m])) by (le))",
           "hide": false,
           "legendFormat": "P50",
           "range": true,
@@ -407,7 +407,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (code) (rate(riftrelay_upstream_responses_total[1m]))",
+          "expr": "sum by (code) (rate(riftrelay_upstream_responses_total{priority=~\"$priority\"}[1m]))",
           "legendFormat": "HTTP {{code}}",
           "range": true,
           "refId": "A"
@@ -498,7 +498,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (outcome) (rate(riftrelay_admission_total[1m]))",
+          "expr": "sum by (outcome) (rate(riftrelay_admission_total{priority=~\"$priority\"}[1m]))",
           "legendFormat": "{{outcome}}",
           "range": true,
           "refId": "A"
@@ -589,13 +589,105 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (bucket, priority) (riftrelay_queue_depth)",
+          "expr": "sum by (bucket, priority) (riftrelay_queue_depth{priority=~\"$priority\"})",
           "legendFormat": "{{bucket}} ({{priority}})",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Queue Depth",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "description": "Cumulative total of all HTTP requests handled by RiftRelay",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.2.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(riftrelay_http_requests_total{priority=~\"$priority\"})",
+          "legendFormat": "Total Requests",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Total Requests",
       "type": "timeseries"
     }
   ],
@@ -620,6 +712,38 @@
         "regex": "",
         "skipUrlSync": false,
         "type": "datasource"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "multi": false,
+        "name": "priority",
+        "label": "Priority",
+        "options": [
+          {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          },
+          {
+            "selected": false,
+            "text": "normal",
+            "value": "normal"
+          },
+          {
+            "selected": false,
+            "text": "high",
+            "value": "high"
+          }
+        ],
+        "query": "normal,high",
+        "skipUrlSync": false,
+        "type": "custom"
       }
     ]
   },

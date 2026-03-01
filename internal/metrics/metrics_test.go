@@ -13,13 +13,19 @@ import (
 func TestMetricsOutput(t *testing.T) {
 	c := NewCollector()
 
+	// Initialize vec metrics so they appear in output
+	handler := c.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/europe/test", nil))
+
 	// Simulate some metrics
 	c.ObserveQueueDepth("europe:test:bucket", limiter.PriorityHigh, 5)
 	c.ObserveQueueDepth("europe:test:bucket", limiter.PriorityNormal, 3)
 	c.ObserveQueueWait("europe:test:bucket", limiter.PriorityNormal, time.Millisecond*50)
-	c.ObserveAdmissionResult("allowed")
-	c.ObserveAdmissionResult("rejected_queue_full")
-	c.ObserveUpstream(200, time.Millisecond*100)
+	c.ObserveAdmissionResult("allowed", "normal")
+	c.ObserveAdmissionResult("rejected_queue_full", "normal")
+	c.ObserveUpstream(200, "normal")
 	c.ObserveUpstreamDuration("europe", "test:bucket", time.Millisecond*100)
 	c.ObserveQueueWait("europe:test:bucket", limiter.PriorityHigh, time.Millisecond*25)
 
@@ -94,8 +100,8 @@ func TestMiddlewareRecordsMetrics(t *testing.T) {
 	}
 
 	// Check request was counted
-	if !strings.Contains(body, "riftrelay_http_requests_total 1") {
-		t.Error("expected riftrelay_http_requests_total to be 1")
+	if !strings.Contains(body, `riftrelay_http_requests_total{priority="normal"} 1`) {
+		t.Error("expected riftrelay_http_requests_total with priority=normal to be 1")
 	}
 }
 

@@ -100,14 +100,14 @@ func TestServerFeatureFlagRoutes(t *testing.T) {
 				if metricsResp.Code != http.StatusOK {
 					t.Fatalf("expected /metrics status %d, got %d", http.StatusOK, metricsResp.Code)
 				}
-				if !strings.Contains(metricsResp.Body.String(), "riftrelay_http_requests_total") {
+				if !strings.Contains(metricsResp.Body.String(), "go_goroutines") {
 					t.Fatalf("expected /metrics response body to expose metrics")
 				}
 			} else {
 				if metricsResp.Code == http.StatusOK {
 					t.Fatalf("expected /metrics to be disabled, got status %d", metricsResp.Code)
 				}
-				if strings.Contains(metricsResp.Body.String(), "riftrelay_http_requests_total") {
+				if strings.Contains(metricsResp.Body.String(), "go_goroutines") {
 					t.Fatalf("expected disabled /metrics response to not expose metrics payload")
 				}
 			}

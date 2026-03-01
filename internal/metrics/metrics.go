@@ -15,8 +15,8 @@ type Collector struct {
 	registry *prometheus.Registry
 
 	// Existing metrics (preserved from original implementation)
-	totalRequests  prometheus.Counter
-	inflight       prometheus.Gauge
+	totalRequests  *prometheus.CounterVec
+	inflight       *prometheus.GaugeVec
 	admissionTotal *prometheus.CounterVec
 	queueDepth     *prometheus.GaugeVec
 	upstreamTotal  *prometheus.CounterVec
@@ -50,18 +50,18 @@ func NewCollector() *Collector {
 
 	c := &Collector{
 		registry: registry,
-		totalRequests: prometheus.NewCounter(prometheus.CounterOpts{
+		totalRequests: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "riftrelay_http_requests_total",
 			Help: "Total number of HTTP requests received",
-		}),
-		inflight: prometheus.NewGauge(prometheus.GaugeOpts{
+		}, []string{"priority"}),
+		inflight: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "riftrelay_http_inflight",
 			Help: "Number of requests currently being processed",
-		}),
+		}, []string{"priority"}),
 		admissionTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "riftrelay_admission_total",
 			Help: "Total number of admission control decisions",
-		}, []string{"outcome"}),
+		}, []string{"outcome", "priority"}),
 		queueDepth: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "riftrelay_queue_depth",
 			Help: "Current queue depth per bucket and priority",
@@ -69,7 +69,7 @@ func NewCollector() *Collector {
 		upstreamTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "riftrelay_upstream_responses_total",
 			Help: "Total number of upstream responses by status code",
-		}, []string{"code"}),
+		}, []string{"code", "priority"}),
 		// New histogram metrics with buckets optimized for proxy latencies
 		requestDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "riftrelay_request_duration_seconds",
@@ -111,14 +111,14 @@ func NewCollector() *Collector {
 // It records total requests, inflight requests, and request duration with labels.
 func (c *Collector) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c.totalRequests.Inc()
-		c.inflight.Inc()
-
 		// Capture priority from header for metrics labeling
 		priority := "normal"
 		if r.Header.Get("X-Priority") == "high" {
 			priority = "high"
 		}
+
+		c.totalRequests.WithLabelValues(priority).Inc()
+		c.inflight.WithLabelValues(priority).Inc()
 
 		// Extract region from URL path if available
 		region := extractRegion(r.URL.Path)
@@ -129,7 +129,7 @@ func (c *Collector) Middleware(next http.Handler) http.Handler {
 		next.ServeHTTP(recorder, r)
 		duration := time.Since(start)
 
-		c.inflight.Dec()
+		c.inflight.WithLabelValues(priority).Dec()
 		c.requestDuration.WithLabelValues(region, priority, statusCodeStr(recorder.statusCode)).Observe(duration.Seconds())
 	})
 }
@@ -145,13 +145,13 @@ func (c *Collector) ObserveQueueWait(bucket string, priority limiter.Priority, w
 }
 
 // ObserveAdmissionResult records the outcome of an admission decision.
-func (c *Collector) ObserveAdmissionResult(outcome string) {
-	c.admissionTotal.WithLabelValues(outcome).Inc()
+func (c *Collector) ObserveAdmissionResult(outcome, priority string) {
+	c.admissionTotal.WithLabelValues(outcome, priority).Inc()
 }
 
 // ObserveUpstream records upstream response metrics.
-func (c *Collector) ObserveUpstream(statusCode int, duration time.Duration) {
-	c.upstreamTotal.WithLabelValues(statusCodeStr(statusCode)).Inc()
+func (c *Collector) ObserveUpstream(statusCode int, priority string) {
+	c.upstreamTotal.WithLabelValues(statusCodeStr(statusCode), priority).Inc()
 }
 
 // ObserveUpstreamDuration records upstream request duration with region and bucket labels.
