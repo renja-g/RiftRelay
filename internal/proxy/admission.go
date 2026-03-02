@@ -103,7 +103,7 @@ func admissionMiddleware(
 				Bucket:    info.Bucket,
 				KeyIndex:  ticket.KeyIndex,
 				Priority:  priorityString(priority),
-				StartedAt: start,
+				StartedAt: time.Now(), // Captured after admission so upstream_duration excludes queue wait
 			})
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

@@ -144,11 +144,11 @@ func newReverseProxy(o options) *httputil.ReverseProxy {
 			log.Printf("proxy error: %v", err)
 			prio := "normal"
 			region := "unknown"
-			endpoint := "unknown"
+			bucket := "unknown"
 			if info, ok := admissionFromContext(r.Context()); ok && o.limiter != nil {
 				prio = info.Priority
 				region = info.Region
-				endpoint = info.Bucket
+				bucket = info.Bucket
 				o.limiter.Observe(limiter.Observation{
 					Region:     info.Region,
 					Bucket:     info.Bucket,
@@ -158,7 +158,7 @@ func newReverseProxy(o options) *httputil.ReverseProxy {
 				})
 			}
 			if o.metrics != nil {
-				o.metrics.ObserveUpstream(http.StatusBadGateway, region, endpoint, prio)
+				o.metrics.ObserveUpstream(http.StatusBadGateway, region, bucket, prio)
 			}
 			http.Error(w, "upstream unavailable", http.StatusBadGateway)
 		},

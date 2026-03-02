@@ -14,16 +14,12 @@ import (
 
 // Collector holds all Prometheus metrics for RiftRelay.
 type Collector struct {
-	registry *prometheus.Registry
-
-	// Existing metrics (preserved from original implementation)
 	totalRequests  *prometheus.CounterVec
 	inflight       *prometheus.GaugeVec
 	admissionTotal *prometheus.CounterVec
 	queueDepth     *prometheus.GaugeVec
 	upstreamTotal  *prometheus.CounterVec
 
-	// New histogram metrics
 	requestDuration  *prometheus.HistogramVec
 	queueWaitSeconds *prometheus.HistogramVec
 	upstreamDuration *prometheus.HistogramVec
@@ -31,7 +27,7 @@ type Collector struct {
 	handler http.Handler
 }
 
-// responseRecorder wraps http.ResponseWriter to capture status code.
+// responseRecorder wraps http.ResponseWriter to capture the status code.
 type responseRecorder struct {
 	http.ResponseWriter
 	statusCode int
@@ -46,12 +42,10 @@ func (rr *responseRecorder) WriteHeader(code int) {
 func NewCollector() *Collector {
 	registry := prometheus.NewRegistry()
 
-	// Register Go runtime metrics
 	registry.MustRegister(prometheus.NewGoCollector())
 	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
 
 	c := &Collector{
-		registry: registry,
 		totalRequests: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "riftrelay_http_requests_total",
 			Help: "Total number of HTTP requests received",
@@ -72,7 +66,6 @@ func NewCollector() *Collector {
 			Name: "riftrelay_upstream_responses_total",
 			Help: "Total number of upstream responses by status code",
 		}, []string{"code", "region", "endpoint", "priority"}),
-		// New histogram metrics with buckets optimized for proxy latencies
 		requestDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "riftrelay_request_duration_seconds",
 			Help:    "HTTP request duration in seconds",
@@ -90,7 +83,6 @@ func NewCollector() *Collector {
 		}, []string{"region", "bucket"}),
 	}
 
-	// Register all metrics
 	registry.MustRegister(
 		c.totalRequests,
 		c.inflight,
@@ -113,17 +105,16 @@ func NewCollector() *Collector {
 // It records total requests, inflight requests, and request duration with labels.
 func (c *Collector) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Capture priority from header for metrics labeling
 		priority := "normal"
-		if r.Header.Get("X-Priority") == "high" {
+		if strings.EqualFold(r.Header.Get("X-Priority"), "high") {
 			priority = "high"
 		}
 
-		// Extract region and canonical endpoint from URL path
 		region, endpoint := parseRouteLabels(r.URL.Path)
 
 		c.totalRequests.WithLabelValues(region, endpoint, priority).Inc()
 		c.inflight.WithLabelValues(region, endpoint, priority).Inc()
+		defer c.inflight.WithLabelValues(region, endpoint, priority).Dec()
 
 		recorder := &responseRecorder{ResponseWriter: w, statusCode: http.StatusOK}
 
@@ -131,7 +122,6 @@ func (c *Collector) Middleware(next http.Handler) http.Handler {
 		next.ServeHTTP(recorder, r)
 		duration := time.Since(start)
 
-		c.inflight.WithLabelValues(region, endpoint, priority).Dec()
 		c.requestDuration.WithLabelValues(region, priority, statusCodeStr(recorder.statusCode)).Observe(duration.Seconds())
 	})
 }
@@ -172,14 +162,6 @@ func priorityLabel(p limiter.Priority) string {
 		return "high"
 	}
 	return "normal"
-}
-
-// splitPath extracts the region (first path segment) allocation-free.
-func splitPath(path string) []string {
-	// Let's implement this allocation-free by returning a slice of strings statically? No.
-	// Actually we should just extract the region directly instead of returning a slice of strings.
-	// Wait, since splitPath is currently used to get the parts[0], we can just make it return the region directly.
-	return nil
 }
 
 // parseRouteLabels extracts region and canonical endpoint from a raw URL path.
