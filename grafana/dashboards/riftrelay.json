@@ -109,8 +109,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(riftrelay_http_requests_total{priority=~\"$priority\",region=~\"$region\",endpoint=~\"$endpoint\"}[1m]))",
-          "legendFormat": "RPS",
+          "expr": "sum by (region) (rate(riftrelay_http_requests_total{priority=~\"$priority\",region=~\"$region\",endpoint=~\"$endpoint\"}[1m]))",
+          "legendFormat": "{{region}}",
           "range": true,
           "refId": "A"
         }
@@ -200,8 +200,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(riftrelay_http_inflight{priority=~\"$priority\",region=~\"$region\",endpoint=~\"$endpoint\"})",
-          "legendFormat": "Current requests",
+          "expr": "sum by (region) (riftrelay_http_inflight{priority=~\"$priority\",region=~\"$region\",endpoint=~\"$endpoint\"})",
+          "legendFormat": "{{region}}",
           "range": true,
           "refId": "A"
         }
@@ -292,8 +292,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum(rate(riftrelay_request_duration_seconds_bucket{priority=~\"$priority\",region=~\"$region\"}[1m])) by (le))",
-          "legendFormat": "P99",
+          "expr": "histogram_quantile(0.99, sum by (le, region) (rate(riftrelay_request_duration_seconds_bucket{priority=~\"$priority\",region=~\"$region\"}[1m])))",
+          "legendFormat": "P99 - {{region}}",
           "range": true,
           "refId": "A"
         },
@@ -303,9 +303,9 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(riftrelay_request_duration_seconds_bucket{priority=~\"$priority\",region=~\"$region\"}[1m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum by (le, region) (rate(riftrelay_request_duration_seconds_bucket{priority=~\"$priority\",region=~\"$region\"}[1m])))",
           "hide": false,
-          "legendFormat": "P95",
+          "legendFormat": "P95 - {{region}}",
           "range": true,
           "refId": "B"
         },
@@ -315,9 +315,9 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(rate(riftrelay_request_duration_seconds_bucket{priority=~\"$priority\",region=~\"$region\"}[1m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum by (le, region) (rate(riftrelay_request_duration_seconds_bucket{priority=~\"$priority\",region=~\"$region\"}[1m])))",
           "hide": false,
-          "legendFormat": "P50",
+          "legendFormat": "P50 - {{region}}",
           "range": true,
           "refId": "C"
         }
@@ -407,8 +407,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (code) (rate(riftrelay_upstream_responses_total{priority=~\"$priority\",region=~\"$region\",endpoint=~\"$endpoint\"}[1m]))",
-          "legendFormat": "HTTP {{code}}",
+          "expr": "sum by (code, region) (rate(riftrelay_upstream_responses_total{priority=~\"$priority\",region=~\"$region\",endpoint=~\"$endpoint\"}[1m]))",
+          "legendFormat": "HTTP {{code}} - {{region}}",
           "range": true,
           "refId": "A"
         }
@@ -498,8 +498,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (outcome) (rate(riftrelay_admission_total{priority=~\"$priority\",region=~\"$region\",endpoint=~\"$endpoint\"}[1m]))",
-          "legendFormat": "{{outcome}}",
+          "expr": "sum by (outcome, region) (rate(riftrelay_admission_total{priority=~\"$priority\",region=~\"$region\",endpoint=~\"$endpoint\"}[1m]))",
+          "legendFormat": "{{outcome}} - {{region}}",
           "range": true,
           "refId": "A"
         }
@@ -681,8 +681,8 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(riftrelay_http_requests_total{priority=~\"$priority\",region=~\"$region\",endpoint=~\"$endpoint\"})",
-          "legendFormat": "Total Requests",
+          "expr": "sum by (region) (riftrelay_http_requests_total{priority=~\"$priority\",region=~\"$region\",endpoint=~\"$endpoint\"})",
+          "legendFormat": "{{region}}",
           "range": true,
           "refId": "A"
         }
