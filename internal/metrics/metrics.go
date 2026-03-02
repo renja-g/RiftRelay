@@ -3,11 +3,13 @@ package metrics
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/renja-g/RiftRelay/internal/limiter"
+	"github.com/renja-g/RiftRelay/internal/router"
 )
 
 // Collector holds all Prometheus metrics for RiftRelay.
@@ -53,15 +55,15 @@ func NewCollector() *Collector {
 		totalRequests: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "riftrelay_http_requests_total",
 			Help: "Total number of HTTP requests received",
-		}, []string{"priority"}),
+		}, []string{"region", "endpoint", "priority"}),
 		inflight: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "riftrelay_http_inflight",
 			Help: "Number of requests currently being processed",
-		}, []string{"priority"}),
+		}, []string{"region", "endpoint", "priority"}),
 		admissionTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "riftrelay_admission_total",
 			Help: "Total number of admission control decisions",
-		}, []string{"outcome", "priority"}),
+		}, []string{"outcome", "region", "endpoint", "priority"}),
 		queueDepth: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "riftrelay_queue_depth",
 			Help: "Current queue depth per bucket and priority",
@@ -69,7 +71,7 @@ func NewCollector() *Collector {
 		upstreamTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "riftrelay_upstream_responses_total",
 			Help: "Total number of upstream responses by status code",
-		}, []string{"code", "priority"}),
+		}, []string{"code", "region", "endpoint", "priority"}),
 		// New histogram metrics with buckets optimized for proxy latencies
 		requestDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "riftrelay_request_duration_seconds",
@@ -117,11 +119,11 @@ func (c *Collector) Middleware(next http.Handler) http.Handler {
 			priority = "high"
 		}
 
-		c.totalRequests.WithLabelValues(priority).Inc()
-		c.inflight.WithLabelValues(priority).Inc()
+		// Extract region and canonical endpoint from URL path
+		region, endpoint := parseRouteLabels(r.URL.Path)
 
-		// Extract region from URL path if available
-		region := extractRegion(r.URL.Path)
+		c.totalRequests.WithLabelValues(region, endpoint, priority).Inc()
+		c.inflight.WithLabelValues(region, endpoint, priority).Inc()
 
 		recorder := &responseRecorder{ResponseWriter: w, statusCode: http.StatusOK}
 
@@ -129,7 +131,7 @@ func (c *Collector) Middleware(next http.Handler) http.Handler {
 		next.ServeHTTP(recorder, r)
 		duration := time.Since(start)
 
-		c.inflight.WithLabelValues(priority).Dec()
+		c.inflight.WithLabelValues(region, endpoint, priority).Dec()
 		c.requestDuration.WithLabelValues(region, priority, statusCodeStr(recorder.statusCode)).Observe(duration.Seconds())
 	})
 }
@@ -145,13 +147,13 @@ func (c *Collector) ObserveQueueWait(bucket string, priority limiter.Priority, w
 }
 
 // ObserveAdmissionResult records the outcome of an admission decision.
-func (c *Collector) ObserveAdmissionResult(outcome, priority string) {
-	c.admissionTotal.WithLabelValues(outcome, priority).Inc()
+func (c *Collector) ObserveAdmissionResult(outcome, region, bucket, priority string) {
+	c.admissionTotal.WithLabelValues(outcome, region, endpointFromBucket(bucket), priority).Inc()
 }
 
 // ObserveUpstream records upstream response metrics.
-func (c *Collector) ObserveUpstream(statusCode int, priority string) {
-	c.upstreamTotal.WithLabelValues(statusCodeStr(statusCode), priority).Inc()
+func (c *Collector) ObserveUpstream(statusCode int, region, bucket, priority string) {
+	c.upstreamTotal.WithLabelValues(statusCodeStr(statusCode), region, endpointFromBucket(bucket), priority).Inc()
 }
 
 // ObserveUpstreamDuration records upstream request duration with region and bucket labels.
@@ -180,24 +182,21 @@ func splitPath(path string) []string {
 	return nil
 }
 
-// extractRegion extracts the first path segment (region) without allocations.
-func extractRegion(path string) string {
-	if len(path) == 0 || path[0] != '/' {
-		return "unknown"
+// parseRouteLabels extracts region and canonical endpoint from a raw URL path.
+func parseRouteLabels(urlPath string) (region, endpoint string) {
+	info, err := router.ParsePath(urlPath)
+	if err != nil {
+		return "unknown", "unknown"
 	}
-	start := 1
-	for i := 1; i < len(path); i++ {
-		if path[i] == '/' {
-			if i > start {
-				return path[start:i]
-			}
-			return "unknown"
-		}
+	return info.Region, endpointFromBucket(info.Bucket)
+}
+
+// endpointFromBucket strips the "region:" prefix from a bucket to get the canonical endpoint.
+func endpointFromBucket(bucket string) string {
+	if idx := strings.IndexByte(bucket, ':'); idx >= 0 {
+		return bucket[idx+1:]
 	}
-	if len(path) > start {
-		return path[start:]
-	}
-	return "unknown"
+	return bucket
 }
 
 // statusCodeStr returns a pre-allocated string for common HTTP status codes.

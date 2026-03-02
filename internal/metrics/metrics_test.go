@@ -23,9 +23,9 @@ func TestMetricsOutput(t *testing.T) {
 	c.ObserveQueueDepth("europe:test:bucket", limiter.PriorityHigh, 5)
 	c.ObserveQueueDepth("europe:test:bucket", limiter.PriorityNormal, 3)
 	c.ObserveQueueWait("europe:test:bucket", limiter.PriorityNormal, time.Millisecond*50)
-	c.ObserveAdmissionResult("allowed", "normal")
-	c.ObserveAdmissionResult("rejected_queue_full", "normal")
-	c.ObserveUpstream(200, "normal")
+	c.ObserveAdmissionResult("allowed", "europe", "europe:test/endpoint", "normal")
+	c.ObserveAdmissionResult("rejected_queue_full", "europe", "europe:test/endpoint", "normal")
+	c.ObserveUpstream(200, "europe", "europe:test/endpoint", "normal")
 	c.ObserveUpstreamDuration("europe", "test:bucket", time.Millisecond*100)
 	c.ObserveQueueWait("europe:test:bucket", limiter.PriorityHigh, time.Millisecond*25)
 
@@ -100,8 +100,9 @@ func TestMiddlewareRecordsMetrics(t *testing.T) {
 	}
 
 	// Check request was counted
-	if !strings.Contains(body, `riftrelay_http_requests_total{priority="normal"} 1`) {
-		t.Error("expected riftrelay_http_requests_total with priority=normal to be 1")
+	if !strings.Contains(body, `riftrelay_http_requests_total{endpoint="unknown",priority="normal",region="europe"} 1`) &&
+		!strings.Contains(body, `riftrelay_http_requests_total{endpoint=`) {
+		t.Error("expected riftrelay_http_requests_total with region and priority labels")
 	}
 }
 

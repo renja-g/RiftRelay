@@ -109,7 +109,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(rate(riftrelay_http_requests_total{priority=~\"$priority\"}[1m]))",
+          "expr": "sum(rate(riftrelay_http_requests_total{priority=~\"$priority\",region=~\"$region\",endpoint=~\"$endpoint\"}[1m]))",
           "legendFormat": "RPS",
           "range": true,
           "refId": "A"
@@ -200,7 +200,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(riftrelay_http_inflight{priority=~\"$priority\"})",
+          "expr": "sum(riftrelay_http_inflight{priority=~\"$priority\",region=~\"$region\",endpoint=~\"$endpoint\"})",
           "legendFormat": "Current requests",
           "range": true,
           "refId": "A"
@@ -292,7 +292,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.99, sum(rate(riftrelay_request_duration_seconds_bucket{priority=~\"$priority\"}[1m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(riftrelay_request_duration_seconds_bucket{priority=~\"$priority\",region=~\"$region\"}[1m])) by (le))",
           "legendFormat": "P99",
           "range": true,
           "refId": "A"
@@ -303,7 +303,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(riftrelay_request_duration_seconds_bucket{priority=~\"$priority\"}[1m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(riftrelay_request_duration_seconds_bucket{priority=~\"$priority\",region=~\"$region\"}[1m])) by (le))",
           "hide": false,
           "legendFormat": "P95",
           "range": true,
@@ -315,7 +315,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(rate(riftrelay_request_duration_seconds_bucket{priority=~\"$priority\"}[1m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(riftrelay_request_duration_seconds_bucket{priority=~\"$priority\",region=~\"$region\"}[1m])) by (le))",
           "hide": false,
           "legendFormat": "P50",
           "range": true,
@@ -407,7 +407,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (code) (rate(riftrelay_upstream_responses_total{priority=~\"$priority\"}[1m]))",
+          "expr": "sum by (code) (rate(riftrelay_upstream_responses_total{priority=~\"$priority\",region=~\"$region\",endpoint=~\"$endpoint\"}[1m]))",
           "legendFormat": "HTTP {{code}}",
           "range": true,
           "refId": "A"
@@ -498,7 +498,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum by (outcome) (rate(riftrelay_admission_total{priority=~\"$priority\"}[1m]))",
+          "expr": "sum by (outcome) (rate(riftrelay_admission_total{priority=~\"$priority\",region=~\"$region\",endpoint=~\"$endpoint\"}[1m]))",
           "legendFormat": "{{outcome}}",
           "range": true,
           "refId": "A"
@@ -681,7 +681,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(riftrelay_http_requests_total{priority=~\"$priority\"})",
+          "expr": "sum(riftrelay_http_requests_total{priority=~\"$priority\",region=~\"$region\",endpoint=~\"$endpoint\"})",
           "legendFormat": "Total Requests",
           "range": true,
           "refId": "A"
@@ -744,6 +744,52 @@
         "query": "normal,high",
         "skipUrlSync": false,
         "type": "custom"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(riftrelay_http_requests_total, region)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "region",
+        "label": "Region",
+        "query": "label_values(riftrelay_http_requests_total, region)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "definition": "label_values(riftrelay_http_requests_total{region=~\"$region\"}, endpoint)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": true,
+        "name": "endpoint",
+        "label": "Endpoint",
+        "query": "label_values(riftrelay_http_requests_total{region=~\"$region\"}, endpoint)",
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
       }
     ]
   },

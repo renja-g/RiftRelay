@@ -77,7 +77,7 @@ func admissionMiddleware(
 					} else if err == context.DeadlineExceeded || err == context.Canceled {
 						reason = "rejected_timeout"
 					}
-					m.ObserveAdmissionResult(reason, priorityString(priority))
+					m.ObserveAdmissionResult(reason, info.Region, info.Bucket, priorityString(priority))
 					m.ObserveQueueWait(info.Bucket, priority, waitDuration)
 				}
 				log.Printf("admission_reject region=%s bucket=%s priority=%s err=%v", info.Region, info.Bucket, priorityString(priority), err)
@@ -94,7 +94,7 @@ func admissionMiddleware(
 
 			if m != nil {
 				m.ObserveQueueWait(info.Bucket, priority, waitDuration)
-				m.ObserveAdmissionResult("allowed", priorityString(priority))
+				m.ObserveAdmissionResult("allowed", info.Region, info.Bucket, priorityString(priority))
 			}
 
 			ctx := withKeyIndex(r.Context(), ticket.KeyIndex)
