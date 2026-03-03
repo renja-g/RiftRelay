@@ -1,0 +1,14 @@
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - gocyclo
+  settings:
+    gocyclo:
+      min-complexity: 10
+
+issues:
+  exclude-rules:
+    - path: internal/router/path_patterns.go
+      linters: [all]

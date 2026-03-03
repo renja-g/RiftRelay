@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/renja-g/RiftRelay/internal/limiter"
 	"github.com/renja-g/RiftRelay/internal/router"
@@ -42,8 +43,8 @@ func (rr *responseRecorder) WriteHeader(code int) {
 func NewCollector() *Collector {
 	registry := prometheus.NewRegistry()
 
-	registry.MustRegister(prometheus.NewGoCollector())
-	registry.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
+	registry.MustRegister(collectors.NewGoCollector())
+	registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 
 	c := &Collector{
 		totalRequests: prometheus.NewCounterVec(prometheus.CounterOpts{
