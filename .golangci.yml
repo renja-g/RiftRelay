@@ -1,12 +1,26 @@
 run:
   timeout: 5m
+  relative-path-mode: gomod
+  modules-download-mode: readonly
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
 
 linters:
   enable:
-    - gocyclo
+    - errcheck # check for errors that are not checked
+    - govet # vet checks
+    - ineffassign # inefficient assignment
+    - staticcheck # static analysis
+    - unused # unused code
+    - gocyclo # complexity
   settings:
     gocyclo:
       min-complexity: 10
+    errcheck:
+      check-type-assertions: true
 
 issues:
   exclude-rules:
