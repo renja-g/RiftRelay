@@ -145,11 +145,11 @@ set_env_value "$TARGET_DIR/.env" "RIOT_TOKEN" "$TOKEN"
 if [ -n "$IMAGE" ]; then
   set_env_value "$TARGET_DIR/.env" "RIFTRELAY_IMAGE" "$IMAGE"
 fi
+if [ "$METRICS" = "false" ]; then
+  set_env_value "$TARGET_DIR/.env" "ENABLE_METRICS" "false"
+fi
 
 COMPOSE_CMD=(docker compose -f "$TARGET_DIR/docker-compose.yml" --env-file "$TARGET_DIR/.env")
-if [ "$METRICS" = "true" ]; then
-  COMPOSE_CMD+=(--profile metrics)
-fi
 
 if [ "$AUTO_UP" = "true" ]; then
   "${COMPOSE_CMD[@]}" pull || true

@@ -32,7 +32,7 @@ services:
   prometheus:
     image: prom/prometheus:v2.54.1
     profiles:
-      - metrics
+      - "${ENABLE_METRICS:-true}"
     volumes:
       - ./grafana/prometheus.yml:/etc/prometheus/prometheus.yml
     command:
@@ -44,7 +44,7 @@ services:
   grafana:
     image: grafana/grafana:11.2.0
     profiles:
-      - metrics
+      - "${ENABLE_METRICS:-true}"
     ports:
       - "3000:3000"
     environment:
