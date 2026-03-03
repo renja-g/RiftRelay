@@ -75,7 +75,7 @@ func TestMiddlewareRecordsMetrics(t *testing.T) {
 
 	handler := c.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("OK"))
 	}))
 
 	req := httptest.NewRequest("GET", "/europe/riot/account/v1/accounts", nil)
@@ -111,7 +111,7 @@ func TestMiddlewareWithPriorityHeader(t *testing.T) {
 
 	handler := c.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTeapot) // 418
-		w.Write([]byte("I'm a teapot"))
+		_, _ = w.Write([]byte("I'm a teapot"))
 	}))
 
 	req := httptest.NewRequest("GET", "/europe/riot/account/v1/accounts", nil)
