@@ -67,7 +67,7 @@ Common settings:
 | `QUEUE_CAPACITY` | `2048` | Max queued requests |
 | `ADMISSION_TIMEOUT` | `5m` | Max wait time for admission (how long a request can wait in the queue) |
 | `SHUTDOWN_TIMEOUT` | `20s` | Graceful shutdown timeout |
-| `ENABLE_METRICS` | `false` | Enable `/metrics` endpoint |
+| `ENABLE_METRICS` | `true` | Enable `/metrics` endpoint |
 | `ENABLE_PPROF` | `false` | Enable pprof endpoints |
 | `ENABLE_SWAGGER` | `true` | Enable Swagger UI |
 
