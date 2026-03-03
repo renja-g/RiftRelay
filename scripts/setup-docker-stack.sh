@@ -7,6 +7,7 @@ BASE_URL="${RIFTRELAY_BASE_URL:-$BASE_URL_DEFAULT}"
 TOKEN="${RIOT_TOKEN:-}"
 IMAGE="${RIFTRELAY_IMAGE:-}"
 AUTO_UP="true"
+METRICS="true"
 
 print_usage() {
   cat <<'EOF'
@@ -17,6 +18,7 @@ Options:
   --base-url <url>             Raw file base URL (default: official GitHub main branch)
   --token <value>              RIOT_TOKEN value
   --image <value>              RIFTRELAY_IMAGE value
+  --no-metrics                 Skip Prometheus + Grafana (metrics profile)
   --no-up                      Download/configure only, do not start containers
   --help                       Show this help
 EOF
@@ -39,6 +41,10 @@ while [ "$#" -gt 0 ]; do
     --image)
       IMAGE="$2"
       shift 2
+      ;;
+    --no-metrics)
+      METRICS="false"
+      shift
       ;;
     --no-up)
       AUTO_UP="false"
@@ -115,6 +121,17 @@ mkdir -p "$TARGET_DIR"
 download_file "docker-compose.yml" "$TARGET_DIR/docker-compose.yml"
 download_file ".env.example" "$TARGET_DIR/.env"
 
+if [ "$METRICS" = "true" ]; then
+  mkdir -p "$TARGET_DIR/grafana/dashboards"
+  mkdir -p "$TARGET_DIR/grafana/provisioning/dashboards"
+  mkdir -p "$TARGET_DIR/grafana/provisioning/datasources"
+
+  download_file "grafana/prometheus.yml"                       "$TARGET_DIR/grafana/prometheus.yml"
+  download_file "grafana/dashboards/riftrelay.json"            "$TARGET_DIR/grafana/dashboards/riftrelay.json"
+  download_file "grafana/provisioning/dashboards/dashboards.yml"   "$TARGET_DIR/grafana/provisioning/dashboards/dashboards.yml"
+  download_file "grafana/provisioning/datasources/prometheus.yml"  "$TARGET_DIR/grafana/provisioning/datasources/prometheus.yml"
+fi
+
 if [ -z "$TOKEN" ]; then
   prompt_for_token
 fi
@@ -129,10 +146,14 @@ if [ -n "$IMAGE" ]; then
   set_env_value "$TARGET_DIR/.env" "RIFTRELAY_IMAGE" "$IMAGE"
 fi
 
+COMPOSE_CMD=(docker compose -f "$TARGET_DIR/docker-compose.yml" --env-file "$TARGET_DIR/.env")
+if [ "$METRICS" = "true" ]; then
+  COMPOSE_CMD+=(--profile metrics)
+fi
+
 if [ "$AUTO_UP" = "true" ]; then
-  # Pull image first to avoid building (for production use)
-  docker compose -f "$TARGET_DIR/docker-compose.yml" --env-file "$TARGET_DIR/.env" pull || true
-  docker compose -f "$TARGET_DIR/docker-compose.yml" --env-file "$TARGET_DIR/.env" up -d
+  "${COMPOSE_CMD[@]}" pull || true
+  "${COMPOSE_CMD[@]}" up -d
 fi
 
 echo
@@ -140,13 +161,17 @@ echo "RiftRelay stack ready in: $TARGET_DIR"
 if [ "$AUTO_UP" = "true" ]; then
   echo "RiftRelay:   http://localhost:8985"
   echo "Swagger UI:  http://localhost:8985/swagger/"
+  if [ "$METRICS" = "true" ]; then
+    echo "Prometheus:  http://localhost:9090"
+    echo "Grafana:     http://localhost:3000  (admin/admin)"
+  fi
   echo
   echo "Tail logs:"
-  echo "  docker compose -f \"$TARGET_DIR/docker-compose.yml\" --env-file \"$TARGET_DIR/.env\" logs -f riftrelay"
+  echo "  ${COMPOSE_CMD[*]} logs -f"
   echo
   echo "Stop stack:"
-  echo "  docker compose -f \"$TARGET_DIR/docker-compose.yml\" --env-file \"$TARGET_DIR/.env\" down"
+  echo "  ${COMPOSE_CMD[*]} down"
 else
   echo "Start stack:"
-  echo "  docker compose -f \"$TARGET_DIR/docker-compose.yml\" --env-file \"$TARGET_DIR/.env\" up -d"
+  echo "  ${COMPOSE_CMD[*]} up -d"
 fi
