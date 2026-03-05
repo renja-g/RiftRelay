@@ -13,6 +13,12 @@ const (
 	PriorityHigh
 )
 
+var priorityNames = [2]string{"normal", "high"}
+
+func (p Priority) String() string {
+	return priorityNames[p&1]
+}
+
 type Admission struct {
 	Region   string
 	Bucket   string

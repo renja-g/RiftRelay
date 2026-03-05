@@ -129,12 +129,12 @@ func (c *Collector) Middleware(next http.Handler) http.Handler {
 
 // ObserveQueueDepth records the current queue depth for a bucket and priority.
 func (c *Collector) ObserveQueueDepth(bucket string, priority limiter.Priority, depth int) {
-	c.queueDepth.WithLabelValues(bucket, priorityLabel(priority)).Set(float64(depth))
+	c.queueDepth.WithLabelValues(bucket, priority.String()).Set(float64(depth))
 }
 
 // ObserveQueueWait records the time spent waiting for admission with bucket and priority labels.
 func (c *Collector) ObserveQueueWait(bucket string, priority limiter.Priority, wait time.Duration) {
-	c.queueWaitSeconds.WithLabelValues(bucket, priorityLabel(priority)).Observe(wait.Seconds())
+	c.queueWaitSeconds.WithLabelValues(bucket, priority.String()).Observe(wait.Seconds())
 }
 
 // ObserveAdmissionResult records the outcome of an admission decision.
@@ -155,14 +155,6 @@ func (c *Collector) ObserveUpstreamDuration(region, bucket string, duration time
 // ServeHTTP implements http.Handler to expose metrics in Prometheus format.
 func (c *Collector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c.handler.ServeHTTP(w, r)
-}
-
-// priorityLabel converts a Priority to its string representation.
-func priorityLabel(p limiter.Priority) string {
-	if p == limiter.PriorityHigh {
-		return "high"
-	}
-	return "normal"
 }
 
 // parseRouteLabels extracts region and canonical endpoint from a raw URL path.
