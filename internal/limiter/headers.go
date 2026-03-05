@@ -1,7 +1,6 @@
 package limiter
 
 import (
-	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -11,26 +10,6 @@ type parsedWindow struct {
 	limit  int
 	count  int
 	window time.Duration
-}
-
-func parseRetryAfter(v string, now time.Time) *time.Time {
-	value := strings.TrimSpace(v)
-	if value == "" {
-		return nil
-	}
-
-	if secs, err := strconv.Atoi(value); err == nil && secs >= 0 {
-		return new(now.Add(time.Duration(secs) * time.Second))
-	}
-
-	if ts, err := http.ParseTime(value); err == nil {
-		if ts.Before(now) {
-			return new(now)
-		}
-		return &ts
-	}
-
-	return nil
 }
 
 func parseRateHeader(limitHeader, countHeader string) []parsedWindow {

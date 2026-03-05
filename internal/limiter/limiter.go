@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/renja-g/RiftRelay/internal/httputil"
 )
 
 const idleTimerWindow = 24 * time.Hour
@@ -191,7 +193,11 @@ func (l *Limiter) handleObservation(
 	}
 
 	now := l.cfg.Clock.Now()
-	retryAfter := parseRetryAfter(obs.Header.Get("Retry-After"), now)
+	var retryAfter *time.Time
+	if d, ok := httputil.ParseRetryAfter(obs.Header.Get("Retry-After")); ok {
+		t := now.Add(d)
+		retryAfter = &t
+	}
 
 	limitType := strings.ToLower(strings.TrimSpace(obs.Header.Get("X-Rate-Limit-Type")))
 	applyMethodRetry := obs.StatusCode == http.StatusTooManyRequests && limitType == "method"

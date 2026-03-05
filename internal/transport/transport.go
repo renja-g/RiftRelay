@@ -6,11 +6,10 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/renja-g/RiftRelay/internal/config"
+	"github.com/renja-g/RiftRelay/internal/httputil"
 )
 
 func New(cfg config.UpstreamTransportConfig) *http.Transport {
@@ -70,7 +69,7 @@ func WithRetryAfter429(base http.RoundTripper, maxRetries int) http.RoundTripper
 				return resp, nil
 			}
 
-			waitFor, ok := parseRetryAfterHeader(resp.Header.Get("Retry-After"), time.Now())
+			waitFor, ok := httputil.ParseRetryAfter(resp.Header.Get("Retry-After"))
 			if !ok {
 				return resp, nil
 			}
@@ -116,33 +115,6 @@ func cloneRequestForRetry(r *http.Request) (*http.Request, error) {
 	}
 	cloned.Body = body
 	return cloned, nil
-}
-
-func parseRetryAfterHeader(value string, now time.Time) (time.Duration, bool) {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return 0, false
-	}
-
-	seconds, err := strconv.Atoi(trimmed)
-	if err == nil {
-		if seconds < 0 {
-			return 0, false
-		}
-		return time.Duration(seconds) * time.Second, true
-	}
-
-	retryAt, err := http.ParseTime(trimmed)
-	if err != nil {
-		return 0, false
-	}
-
-	waitFor := retryAt.Sub(now)
-	if waitFor < 0 {
-		return 0, true
-	}
-
-	return waitFor, true
 }
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)
