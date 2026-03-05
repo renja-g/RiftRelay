@@ -54,7 +54,7 @@ func WithMetrics(m *metrics.Collector) Option {
 // New constructs the reverse proxy handler.
 func New(cfg config.Config, opts ...Option) http.Handler {
 	o := options{
-		baseTransport: transport.New(cfg.UpstreamTransport),
+		baseTransport: transport.New(),
 		admitTimeout:  cfg.AdmissionTimeout,
 		apiTokens:     cfg.Tokens,
 	}

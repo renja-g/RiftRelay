@@ -32,18 +32,15 @@ func TestLoad(t *testing.T) {
 		{
 			name: "parses typed overrides",
 			env: map[string]string{
-				"RIOT_TOKEN":                 "a,b",
-				"PORT":                       "9101",
-				"QUEUE_CAPACITY":             "1234",
-				"ADMISSION_TIMEOUT":          "3s",
-				"ADDITIONAL_WINDOW_SIZE":     "250ms",
-				"ENABLE_METRICS":             "false",
-				"ENABLE_PPROF":               "true",
-				"ENABLE_SWAGGER":             "true",
-				"TRANSPORT_MAX_IDLE_CONNS":   "111",
-				"TRANSPORT_FORCE_HTTP2":      "false",
-				"UPSTREAM_TIMEOUT":           "2s",
-				"SERVER_READ_HEADER_TIMEOUT": "4s",
+				"RIOT_TOKEN":             "a,b",
+				"PORT":                   "9101",
+				"QUEUE_CAPACITY":         "1234",
+				"ADMISSION_TIMEOUT":      "3s",
+				"ADDITIONAL_WINDOW_SIZE": "250ms",
+				"ENABLE_METRICS":         "false",
+				"ENABLE_PPROF":           "true",
+				"ENABLE_SWAGGER":         "true",
+				"UPSTREAM_TIMEOUT":       "2s",
 			},
 			assertions: func(t *testing.T, cfg Config) {
 				t.Helper()
@@ -68,11 +65,8 @@ func TestLoad(t *testing.T) {
 				if !cfg.SwaggerEnabled {
 					t.Fatalf("expected swagger enabled")
 				}
-				if cfg.UpstreamTransport.MaxIdleConns != 111 {
-					t.Fatalf("expected max idle 111, got %d", cfg.UpstreamTransport.MaxIdleConns)
-				}
-				if cfg.UpstreamTransport.ForceAttemptHTTP2 {
-					t.Fatalf("expected force http2 disabled")
+				if cfg.UpstreamTimeout != 2*time.Second {
+					t.Fatalf("expected upstream timeout 2s, got %s", cfg.UpstreamTimeout)
 				}
 			},
 		},
@@ -132,20 +126,7 @@ func applyEnv(t *testing.T, values map[string]string) func() {
 		"ENABLE_METRICS",
 		"ENABLE_PPROF",
 		"ENABLE_SWAGGER",
-		"SERVER_READ_HEADER_TIMEOUT",
-		"SERVER_READ_TIMEOUT",
-		"SERVER_WRITE_TIMEOUT",
-		"SERVER_IDLE_TIMEOUT",
-		"TRANSPORT_MAX_IDLE_CONNS",
-		"TRANSPORT_MAX_IDLE_CONNS_PER_HOST",
-		"TRANSPORT_MAX_CONNS_PER_HOST",
-		"TRANSPORT_IDLE_CONN_TIMEOUT",
-		"TRANSPORT_TLS_HANDSHAKE_TIMEOUT",
-		"TRANSPORT_EXPECT_CONTINUE_TIMEOUT",
-		"TRANSPORT_DIAL_TIMEOUT",
-		"TRANSPORT_DIAL_KEEP_ALIVE",
-		"TRANSPORT_RESPONSE_HEADER_TIMEOUT",
-		"TRANSPORT_FORCE_HTTP2",
+		"DEFAULT_APP_RATE_LIMIT",
 	}
 
 	original := make(map[string]string, len(keys))

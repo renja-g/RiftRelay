@@ -10,46 +10,37 @@ import (
 )
 
 const (
-	defaultPort                   = 8985
-	defaultQueueCapacity          = 2048
-	defaultAdmissionTimeout       = 5 * time.Minute
-	defaultAdditionalWindowSize   = 150 * time.Millisecond
-	defaultShutdownTimeout        = 20 * time.Second
-	defaultReadHeaderTimeout      = 10 * time.Second
-	defaultReadTimeout            = 10 * time.Second
-	defaultWriteTimeout           = 5 * time.Minute
-	defaultIdleTimeout            = 90 * time.Second
-	defaultMaxIdleConns           = 512
-	defaultMaxIdleConnsPerHost    = 256
-	defaultMaxConnsPerHost        = 0
-	defaultIdleConnTimeout        = 90 * time.Second
-	defaultTLSHandshakeTimeout    = 10 * time.Second
-	defaultExpectContinueTimeout  = 1 * time.Second
-	defaultDialTimeout            = 5 * time.Second
-	defaultDialKeepAlive          = 30 * time.Second
-	defaultResponseHeaderTimeout  = 15 * time.Second
-	defaultForceAttemptHTTP2      = true
-	defaultEnableMetrics          = true
-	defaultEnablePprof            = false
-	defaultEnableSwagger          = true
-	defaultUpstreamRequestTimeout = 0
-	defaultAppRateLimit           = "20:1,100:120"
+	// User-facing defaults (env-configurable)
+	defaultPort                 = 8985
+	defaultQueueCapacity        = 2048
+	defaultAdmissionTimeout     = 5 * time.Minute
+	defaultAdditionalWindowSize = 150 * time.Millisecond
+	defaultShutdownTimeout      = 20 * time.Second
+	defaultEnableMetrics        = true
+	defaultEnablePprof          = false
+	defaultEnableSwagger        = true
+	defaultUpstreamTimeout      = 0
+	defaultAppRateLimit         = "20:1,100:120"
+
+	// HTTP server tuning (internal)
+	defaultReadHeaderTimeout = 10 * time.Second
+	defaultReadTimeout       = 10 * time.Second
+	defaultIdleTimeout       = 90 * time.Second
 )
 
 type Config struct {
-	Tokens            []string
-	Port              int
-	QueueCapacity     int
-	AdmissionTimeout  time.Duration
-	AdditionalWindow  time.Duration
-	ShutdownTimeout   time.Duration
-	MetricsEnabled    bool
-	PprofEnabled      bool
-	SwaggerEnabled    bool
-	UpstreamTimeout   time.Duration
-	DefaultAppLimits  string
-	Server            ServerConfig
-	UpstreamTransport UpstreamTransportConfig
+	Tokens           []string
+	Port             int
+	QueueCapacity    int
+	AdmissionTimeout time.Duration
+	AdditionalWindow time.Duration
+	ShutdownTimeout  time.Duration
+	MetricsEnabled   bool
+	PprofEnabled     bool
+	SwaggerEnabled   bool
+	UpstreamTimeout  time.Duration
+	DefaultAppLimits string
+	Server           ServerConfig
 }
 
 type ServerConfig struct {
@@ -57,19 +48,6 @@ type ServerConfig struct {
 	ReadTimeout       time.Duration
 	WriteTimeout      time.Duration
 	IdleTimeout       time.Duration
-}
-
-type UpstreamTransportConfig struct {
-	MaxIdleConns          int
-	MaxIdleConnsPerHost   int
-	MaxConnsPerHost       int
-	IdleConnTimeout       time.Duration
-	TLSHandshakeTimeout   time.Duration
-	ExpectContinueTimeout time.Duration
-	DialTimeout           time.Duration
-	DialKeepAlive         time.Duration
-	ResponseHeaderTimeout time.Duration
-	ForceAttemptHTTP2     bool
 }
 
 func Load() (Config, error) {
@@ -84,25 +62,12 @@ func Load() (Config, error) {
 		MetricsEnabled:   defaultEnableMetrics,
 		PprofEnabled:     defaultEnablePprof,
 		SwaggerEnabled:   defaultEnableSwagger,
-		UpstreamTimeout:  defaultUpstreamRequestTimeout,
+		UpstreamTimeout:  defaultUpstreamTimeout,
 		DefaultAppLimits: defaultAppRateLimit,
 		Server: ServerConfig{
 			ReadHeaderTimeout: defaultReadHeaderTimeout,
 			ReadTimeout:       defaultReadTimeout,
-			WriteTimeout:      defaultWriteTimeout,
 			IdleTimeout:       defaultIdleTimeout,
-		},
-		UpstreamTransport: UpstreamTransportConfig{
-			MaxIdleConns:          defaultMaxIdleConns,
-			MaxIdleConnsPerHost:   defaultMaxIdleConnsPerHost,
-			MaxConnsPerHost:       defaultMaxConnsPerHost,
-			IdleConnTimeout:       defaultIdleConnTimeout,
-			TLSHandshakeTimeout:   defaultTLSHandshakeTimeout,
-			ExpectContinueTimeout: defaultExpectContinueTimeout,
-			DialTimeout:           defaultDialTimeout,
-			DialKeepAlive:         defaultDialKeepAlive,
-			ResponseHeaderTimeout: defaultResponseHeaderTimeout,
-			ForceAttemptHTTP2:     defaultForceAttemptHTTP2,
 		},
 	}
 
@@ -126,22 +91,6 @@ func Load() (Config, error) {
 
 	mustParseRateLimit("DEFAULT_APP_RATE_LIMIT", &cfg.DefaultAppLimits, &errs)
 
-	mustParseDuration("SERVER_READ_HEADER_TIMEOUT", &cfg.Server.ReadHeaderTimeout, &errs)
-	mustParseDuration("SERVER_READ_TIMEOUT", &cfg.Server.ReadTimeout, &errs)
-	mustParseDuration("SERVER_WRITE_TIMEOUT", &cfg.Server.WriteTimeout, &errs)
-	mustParseDuration("SERVER_IDLE_TIMEOUT", &cfg.Server.IdleTimeout, &errs)
-
-	mustParseInt("TRANSPORT_MAX_IDLE_CONNS", &cfg.UpstreamTransport.MaxIdleConns, 1, &errs)
-	mustParseInt("TRANSPORT_MAX_IDLE_CONNS_PER_HOST", &cfg.UpstreamTransport.MaxIdleConnsPerHost, 1, &errs)
-	mustParseInt("TRANSPORT_MAX_CONNS_PER_HOST", &cfg.UpstreamTransport.MaxConnsPerHost, 0, &errs)
-	mustParseDuration("TRANSPORT_IDLE_CONN_TIMEOUT", &cfg.UpstreamTransport.IdleConnTimeout, &errs)
-	mustParseDuration("TRANSPORT_TLS_HANDSHAKE_TIMEOUT", &cfg.UpstreamTransport.TLSHandshakeTimeout, &errs)
-	mustParseDuration("TRANSPORT_EXPECT_CONTINUE_TIMEOUT", &cfg.UpstreamTransport.ExpectContinueTimeout, &errs)
-	mustParseDuration("TRANSPORT_DIAL_TIMEOUT", &cfg.UpstreamTransport.DialTimeout, &errs)
-	mustParseDuration("TRANSPORT_DIAL_KEEP_ALIVE", &cfg.UpstreamTransport.DialKeepAlive, &errs)
-	mustParseDuration("TRANSPORT_RESPONSE_HEADER_TIMEOUT", &cfg.UpstreamTransport.ResponseHeaderTimeout, &errs)
-	mustParseBool("TRANSPORT_FORCE_HTTP2", &cfg.UpstreamTransport.ForceAttemptHTTP2, &errs)
-
 	if cfg.Port > 65535 {
 		errs = append(errs, fmt.Errorf("PORT must be <= 65535"))
 	}
@@ -149,6 +98,13 @@ func Load() (Config, error) {
 	if len(errs) > 0 {
 		return Config{}, errors.Join(errs...)
 	}
+
+	// WriteTimeout must allow: queue wait (AdmissionTimeout) + upstream request + buffer
+	upstreamBudget := cfg.UpstreamTimeout
+	if upstreamBudget <= 0 {
+		upstreamBudget = 5 * time.Minute
+	}
+	cfg.Server.WriteTimeout = cfg.AdmissionTimeout + upstreamBudget + 30*time.Second
 
 	return cfg, nil
 }
