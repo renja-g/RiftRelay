@@ -87,6 +87,7 @@ func (l *Limiter) loop() {
 	}
 
 	buckets := make(map[string]*bucketQueue)
+	regionIndex := make(map[string][]*bucketQueue)
 	wakeups := make(wakeHeap, 0)
 	heap.Init(&wakeups)
 
@@ -106,11 +107,11 @@ func (l *Limiter) loop() {
 
 		select {
 		case req := <-l.admitCh:
-			l.handleAdmit(req, keys, buckets, &wakeups)
+			l.handleAdmit(req, keys, buckets, regionIndex, &wakeups)
 		case obs := <-l.observeCh:
-			l.handleObservation(obs, keys, buckets, &wakeups)
+			l.handleObservation(obs, keys, buckets, regionIndex, &wakeups)
 			// Drain all pending observations before re-entering select.
-			l.drainObservations(keys, buckets, &wakeups)
+			l.drainObservations(keys, buckets, regionIndex, &wakeups)
 		case <-timer.C:
 			now := l.cfg.Clock.Now()
 			for len(wakeups) > 0 {
@@ -140,6 +141,7 @@ func (l *Limiter) handleAdmit(
 	req *admitRequest,
 	keys []keyState,
 	buckets map[string]*bucketQueue,
+	regionIndex map[string][]*bucketQueue,
 	wakeups *wakeHeap,
 ) {
 	if req == nil {
@@ -158,6 +160,7 @@ func (l *Limiter) handleAdmit(
 			heapIndex: -1,
 		}
 		buckets[req.admission.Bucket] = bucket
+		regionIndex[bucket.region] = append(regionIndex[bucket.region], bucket)
 	}
 
 	if bucket.depth() >= l.cfg.QueueCapacity {
@@ -183,6 +186,7 @@ func (l *Limiter) handleObservation(
 	obs Observation,
 	keys []keyState,
 	buckets map[string]*bucketQueue,
+	regionIndex map[string][]*bucketQueue,
 	wakeups *wakeHeap,
 ) {
 	if obs.KeyIndex < 0 || obs.KeyIndex >= len(keys) {
@@ -212,22 +216,21 @@ func (l *Limiter) handleObservation(
 	key.method(obs.Bucket, now, l.cfg.AdditionalWindow).apply(methodLimits, retryAfter, applyMethodRetry, now, l.cfg.AdditionalWindow)
 
 	// An app-limit update can unblock or block multiple buckets in the same region.
-	for _, bucket := range buckets {
-		if bucket.region == obs.Region {
-			l.dispatch(bucket, keys, wakeups)
-		}
+	for _, bucket := range regionIndex[obs.Region] {
+		l.dispatch(bucket, keys, wakeups)
 	}
 }
 
 func (l *Limiter) drainObservations(
 	keys []keyState,
 	buckets map[string]*bucketQueue,
+	regionIndex map[string][]*bucketQueue,
 	wakeups *wakeHeap,
 ) {
 	for {
 		select {
 		case obs := <-l.observeCh:
-			l.handleObservation(obs, keys, buckets, wakeups)
+			l.handleObservation(obs, keys, buckets, regionIndex, wakeups)
 		default:
 			return
 		}
