@@ -111,7 +111,13 @@ func (c *Collector) Middleware(next http.Handler) http.Handler {
 			priority = "high"
 		}
 
-		region, endpoint := parseRouteLabels(r.URL.Path)
+		var region, endpoint string
+		if info, ok := router.PathFromContext(r.Context()); ok {
+			region = info.Region
+			endpoint = endpointFromBucket(info.Bucket)
+		} else {
+			region, endpoint = parseRouteLabels(r.URL.Path)
+		}
 
 		c.totalRequests.WithLabelValues(region, endpoint, priority).Inc()
 		c.inflight.WithLabelValues(region, endpoint, priority).Inc()

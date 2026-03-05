@@ -71,8 +71,10 @@ func New(cfg config.Config, opts ...Option) http.Handler {
 	if o.limiter != nil {
 		handler = admissionMiddleware(o.limiter, o.metrics, o.admitTimeout)(handler)
 	}
-
-	handler = router.ProxyHandler(handler)
+	if o.metrics != nil {
+		handler = o.metrics.Middleware(handler)
+	}
+	handler = router.ProxyHandler(handler) // Outermost — parse path first
 
 	return handler
 }
