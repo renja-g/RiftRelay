@@ -59,19 +59,20 @@ Set `RIOT_TOKEN` (required). Multiple tokens are supported as comma separated va
 RIOT_TOKEN=token1,token2,token3
 ```
 
-Common settings:
+Supported environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `8985` | Server port |
 | `QUEUE_CAPACITY` | `2048` | Max queued requests |
 | `ADMISSION_TIMEOUT` | `5m` | Max wait time for admission (how long a request can wait in the queue) |
+| `ADDITIONAL_WINDOW_SIZE` | `150ms` | Extra buffer added to rate limit windows |
 | `SHUTDOWN_TIMEOUT` | `20s` | Graceful shutdown timeout |
+| `UPSTREAM_TIMEOUT` | `0` | Timeout for upstream requests (0 = no timeout) |
 | `ENABLE_METRICS` | `true` | Enable `/metrics` endpoint |
 | `ENABLE_PPROF` | `false` | Enable pprof endpoints |
 | `ENABLE_SWAGGER` | `true` | Enable Swagger UI |
-
-See `.env.example` for all available options.
+| `DEFAULT_APP_RATE_LIMIT` | `20:1,100:120` | Default app rate limits before first upstream response |
 
 ## Endpoints
 
