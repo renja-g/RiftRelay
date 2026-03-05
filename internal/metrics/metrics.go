@@ -203,6 +203,8 @@ func statusCodeStr(code int) string {
 		return "408"
 	case 429:
 		return "429"
+	case 499:
+		return "499"
 	case 500:
 		return "500"
 	case 502:
