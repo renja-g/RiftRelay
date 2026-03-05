@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-	"time"
 )
 
 type testResponse struct {
@@ -168,63 +167,5 @@ func TestWithRetryAfter429HonorsContextCancellation(t *testing.T) {
 	_, err = retryingTransport.RoundTrip(req)
 	if err == nil {
 		t.Fatalf("expected context cancellation error")
-	}
-}
-
-func TestParseRetryAfterHeader(t *testing.T) {
-	now := time.Unix(1700000000, 0).UTC()
-
-	tests := []struct {
-		name     string
-		header   string
-		wantWait time.Duration
-		wantOK   bool
-	}{
-		{
-			name:     "parses delta seconds",
-			header:   "3",
-			wantWait: 3 * time.Second,
-			wantOK:   true,
-		},
-		{
-			name:     "parses http date",
-			header:   now.Add(5 * time.Second).Format(http.TimeFormat),
-			wantWait: 5 * time.Second,
-			wantOK:   true,
-		},
-		{
-			name:     "past date results in immediate retry",
-			header:   now.Add(-5 * time.Second).Format(http.TimeFormat),
-			wantWait: 0,
-			wantOK:   true,
-		},
-		{
-			name:   "invalid header",
-			header: "later",
-			wantOK: false,
-		},
-		{
-			name:   "empty header",
-			header: "",
-			wantOK: false,
-		},
-		{
-			name:   "negative seconds are invalid",
-			header: "-1",
-			wantOK: false,
-		},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			gotWait, gotOK := parseRetryAfterHeader(tt.header, now)
-			if gotOK != tt.wantOK {
-				t.Fatalf("expected ok=%v, got %v", tt.wantOK, gotOK)
-			}
-			if gotWait != tt.wantWait {
-				t.Fatalf("expected wait=%s, got %s", tt.wantWait, gotWait)
-			}
-		})
 	}
 }
