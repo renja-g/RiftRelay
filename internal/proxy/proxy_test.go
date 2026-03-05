@@ -1,6 +1,8 @@
 package proxy
 
 import (
+	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -88,5 +90,90 @@ func TestProxyInjectsTokenAndRoutes(t *testing.T) {
 	}
 	if got := rt.lastRequest.Header.Get("X-Forwarded-Proto"); got != "http" {
 		t.Fatalf("expected X-Forwarded-Proto=http, got %q", got)
+	}
+}
+
+type errorRoundTripper struct {
+	err error
+}
+
+func (e *errorRoundTripper) RoundTrip(_ *http.Request) (*http.Response, error) {
+	return nil, e.err
+}
+
+func TestErrorHandlerStatusCodes(t *testing.T) {
+	tests := []struct {
+		name        string
+		err         error
+		wantStatus  int
+		wantRetry   bool
+		retryVal    string
+		wantBodySub string
+	}{
+		{
+			name:        "context.Canceled returns 499",
+			err:         context.Canceled,
+			wantStatus:  499,
+			wantRetry:   false,
+			wantBodySub: "client closed request",
+		},
+		{
+			name:        "context.DeadlineExceeded returns 408 with Retry-After",
+			err:         context.DeadlineExceeded,
+			wantStatus:  http.StatusRequestTimeout,
+			wantRetry:   true,
+			retryVal:    "1",
+			wantBodySub: "request timed out",
+		},
+		{
+			name:        "generic error returns 502",
+			err:         errors.New("connection refused"),
+			wantStatus:  http.StatusBadGateway,
+			wantRetry:   false,
+			wantBodySub: "upstream unavailable",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l, err := limiter.New(limiter.Config{
+				KeyCount:      1,
+				QueueCapacity: 32,
+			})
+			if err != nil {
+				t.Fatalf("new limiter: %v", err)
+			}
+			defer l.Close()
+
+			collector := metrics.NewCollector()
+			rt := &errorRoundTripper{err: tt.err}
+			handler := New(
+				config.Config{
+					Tokens:           []string{"test-token"},
+					AdmissionTimeout: 2 * time.Second,
+				},
+				func(o *options) {
+					o.baseTransport = rt
+				},
+				WithLimiter(l),
+				WithMetrics(collector),
+			)
+
+			rr := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/europe/riot/account/v1/accounts/me", nil)
+			handler.ServeHTTP(rr, req)
+
+			if rr.Code != tt.wantStatus {
+				t.Errorf("status: got %d, want %d", rr.Code, tt.wantStatus)
+			}
+			if retry := rr.Header().Get("Retry-After"); (retry != "") != tt.wantRetry {
+				t.Errorf("Retry-After: got %q, want presence=%v", retry, tt.wantRetry)
+			} else if tt.wantRetry && retry != tt.retryVal {
+				t.Errorf("Retry-After: got %q, want %q", retry, tt.retryVal)
+			}
+			if body := rr.Body.String(); !strings.Contains(body, tt.wantBodySub) {
+				t.Errorf("body: got %q, want substring %q", body, tt.wantBodySub)
+			}
+		})
 	}
 }

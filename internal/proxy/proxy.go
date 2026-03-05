@@ -2,9 +2,11 @@ package proxy
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"net/http/httputil"
+	"strconv"
 	"sync"
 	"time"
 
@@ -145,6 +147,23 @@ func newReverseProxy(o options) *httputil.ReverseProxy {
 			prio := "normal"
 			region := "unknown"
 			bucket := "unknown"
+
+			var statusCode int
+			var msg string
+			var retryAfter time.Duration
+			switch {
+			case errors.Is(err, context.Canceled):
+				statusCode = 499
+				msg = "client closed request"
+			case errors.Is(err, context.DeadlineExceeded):
+				statusCode = http.StatusRequestTimeout
+				msg = "request timed out"
+				retryAfter = time.Second
+			default:
+				statusCode = http.StatusBadGateway
+				msg = "upstream unavailable"
+			}
+
 			if info, ok := admissionFromContext(r.Context()); ok && o.limiter != nil {
 				prio = info.Priority
 				region = info.Region
@@ -153,14 +172,17 @@ func newReverseProxy(o options) *httputil.ReverseProxy {
 					Region:     info.Region,
 					Bucket:     info.Bucket,
 					KeyIndex:   info.KeyIndex,
-					StatusCode: http.StatusBadGateway,
+					StatusCode: statusCode,
 					Header:     http.Header{},
 				})
 			}
 			if o.metrics != nil {
-				o.metrics.ObserveUpstream(http.StatusBadGateway, region, bucket, prio)
+				o.metrics.ObserveUpstream(statusCode, region, bucket, prio)
 			}
-			http.Error(w, "upstream unavailable", http.StatusBadGateway)
+			if retryAfter > 0 {
+				w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Round(time.Second).Seconds())))
+			}
+			http.Error(w, msg, statusCode)
 		},
 	}
 }
