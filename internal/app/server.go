@@ -50,9 +50,6 @@ func New(cfg config.Config) (*Server, error) {
 	}
 
 	handler := proxy.New(cfg, proxyOptions...)
-	if collector != nil {
-		handler = collector.Middleware(handler)
-	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
