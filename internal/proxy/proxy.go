@@ -88,11 +88,7 @@ func newReverseProxy(o options) *httputil.ReverseProxy {
 	rewrite := func(preq *httputil.ProxyRequest) {
 		info, ok := router.PathFromContext(preq.In.Context())
 		if !ok {
-			if parsed, err := router.ParsePath(preq.In.URL.Path); err == nil {
-				info = parsed
-			} else {
-				return
-			}
+			return
 		}
 
 		host := info.Region + ".api.riotgames.com"
