@@ -116,7 +116,7 @@ func (c *Collector) Middleware(next http.Handler) http.Handler {
 			region = info.Region
 			endpoint = endpointFromBucket(info.Bucket)
 		} else {
-			region, endpoint = parseRouteLabels(r.URL.Path)
+			region, endpoint = "unknown", "unknown"
 		}
 
 		c.totalRequests.WithLabelValues(region, endpoint, priority).Inc()
@@ -161,15 +161,6 @@ func (c *Collector) ObserveUpstreamDuration(region, bucket string, duration time
 // ServeHTTP implements http.Handler to expose metrics in Prometheus format.
 func (c *Collector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c.handler.ServeHTTP(w, r)
-}
-
-// parseRouteLabels extracts region and canonical endpoint from a raw URL path.
-func parseRouteLabels(urlPath string) (region, endpoint string) {
-	info, err := router.ParsePath(urlPath)
-	if err != nil {
-		return "unknown", "unknown"
-	}
-	return info.Region, endpointFromBucket(info.Bucket)
 }
 
 // endpointFromBucket strips the "region:" prefix from a bucket to get the canonical endpoint.
