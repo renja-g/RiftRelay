@@ -1,0 +1,33 @@
+---
+title: Priority Requests
+description: Use high-priority requests to bypass pacing delay while still respecting Riot API rate limits.
+icon: Zap
+---
+
+RiftRelay supports request priorities so you can mark latency-sensitive traffic as more urgent.
+
+**Normal traffic** is paced smoothly across the remaining rate-limit window. **High-priority traffic** runs as soon as it is safely allowed. High priority is a scheduling hint that bypasses pacing delay but still respects Riot's app and method rate limits. It is not a rate-limit bypass.
+
+## How to send a high-priority request
+
+```http
+X-Priority: high
+```
+
+Example:
+
+```sh
+curl -H "X-Priority: high" \
+  "http://localhost:8985/europe/riot/account/v1/accounts/by-riot-id/Someone/EUW1"
+```
+
+Without the header, the request uses normal priority. RiftRelay currently recognizes only `high`; other values are ignored.
+
+
+## Operational guidance
+
+- Default to normal priority; reserve high priority for genuinely user-sensitive traffic
+- If you enable metrics, watch queue depth, wait times, and rejection rates. Too much high-priority traffic crowds out the value of prioritization
+## Swagger UI
+
+When Swagger is enabled (`GET /swagger/`), the OpenAPI spec includes `X-Priority` as an available parameter, so you can test priority requests from the UI.

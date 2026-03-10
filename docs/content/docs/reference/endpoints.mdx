@@ -1,0 +1,82 @@
+---
+title: Endpoints
+description: Reference for RiftRelay's built-in HTTP endpoints and proxied request format.
+icon: Waypoints
+---
+
+## Built-in routes
+
+- `GET /healthz`: always available
+- `GET /metrics`: when `ENABLE_METRICS=true`. See [metrics](/docs/reference/metrics)
+- `GET /debug/pprof/`: when `ENABLE_PPROF=true`. See [profiling](/docs/reference/profiling)
+- `GET /swagger/`: when `ENABLE_SWAGGER=true`
+- `/{region}/{riot-api-path}`: proxied Riot API traffic
+
+## Health check
+
+### `GET /healthz`
+
+Returns `204 No Content`. Use for container checks, uptime probes, and load balancers.
+
+```sh
+curl -i http://localhost:8985/healthz
+```
+
+## Metrics
+
+### `GET /metrics`
+
+Prometheus-compatible metrics for queueing, admission, and upstream request visibility. See the [metrics reference](/docs/reference/metrics) for details.
+
+## Profiling
+
+### `GET /debug/pprof/`
+
+Go profiling index and related routes (`cmdline`, `profile`, `symbol`, `trace`). See the [profiling reference](/docs/reference/profiling) for usage.
+
+## Swagger UI
+
+### `GET /swagger/`
+
+Built-in Swagger UI. RiftRelay fetches the Riot OpenAPI spec, rewrites the server URL to point at your instance, removes upstream security requirements, and adds the `X-Priority` header parameter. Useful for testing requests against your local proxy.
+
+## Proxied Riot API requests
+
+### `/{region}/{riot-api-path}`
+
+All Riot API traffic uses this path shape. The first segment is the region; the rest is forwarded as the Riot API path. Invalid paths return `400`.
+
+Example:
+
+```sh
+curl "http://localhost:8985/europe/riot/account/v1/accounts/by-riot-id/Someone/EUW1"
+```
+
+Forwarded to: `https://europe.api.riotgames.com/riot/account/v1/accounts/by-riot-id/Someone/EUW1`
+
+RiftRelay injects the Riot token. Your client does not send `X-Riot-Token`. For `X-Priority: high`, see [priority requests](/docs/guides/priority-requests).
+
+### Request routing
+
+RiftRelay matches the upstream path to a known Riot API route pattern and uses it as the method-level bucket key for rate limiting. Paths like `/lol/match/v5/matches/EUW1_1234567890` are grouped under a normalized pattern such as `/lol/match/v5/matches/{matchId}`.
+
+## Error behavior
+
+| Route type | Status | Meaning |
+| --- | --- | --- |
+| Health | `204` | Service is healthy |
+| Invalid proxy path | `400` | Request path is malformed (missing region, missing path, or malformed region) |
+| Admission rejection | `429` | Request rejected, queue exhausted, or admission timeout; includes `Retry-After` when applicable |
+| Upstream timeout | `408` | Upstream request exceeded timeout budget |
+| Client disconnect | `499` | Client disconnected before upstream completed |
+| Upstream unavailable | `502` | Upstream unreachable or returned unrecoverable failure |
+
+RiftRelay retries upstream `429` responses when Riot includes a valid `Retry-After` header; this is transport-level behavior separate from the main admission controller.
+
+## Recommended exposure
+
+- Expose proxy traffic
+- Expose `/healthz` to your orchestrator or load balancer
+- Expose `/metrics` only to your monitoring system
+- Keep `/debug/pprof/` private
+- Enable `/swagger/` for local or internal use; disable in hardened environments if not needed

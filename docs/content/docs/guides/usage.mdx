@@ -1,0 +1,54 @@
+---
+title: Usage
+description: Learn how to send requests through RiftRelay and how request routing, priority, and errors work.
+icon: Waypoints
+---
+
+This guide explains how to use RiftRelay once it is running.
+
+## Request format
+
+Every proxied request must use this path shape:
+
+```txt
+/{region}/{riot-api-path}
+```
+
+RiftRelay reads the first path segment as the Riot routing region or platform host prefix and forwards the rest of the path to the Riot API.
+
+Example:
+
+```sh
+curl "http://localhost:8985/europe/riot/account/v1/accounts/by-riot-id/Someone/EUW1"
+```
+
+Forwarded to: `https://europe.api.riotgames.com/riot/account/v1/accounts/by-riot-id/Someone/EUW1`
+
+Other endpoints (match, summoner, etc.) follow the same pattern. See [Endpoints](/docs/reference/endpoints) for the full reference.
+
+## Request headers
+
+RiftRelay injects the Riot API token from the configured `RIOT_TOKEN`. Do not send your token from the client.
+
+### `X-Priority`
+
+Send `X-Priority: high` for latency-sensitive requests. It bypasses pacing delay but still respects rate limits. See [priority requests](/docs/guides/priority-requests).
+
+## Timeouts
+
+Requests may wait in the admission queue before forwarding. See [Configuration](/docs/reference/configuration) for `ADMISSION_TIMEOUT` and `UPSTREAM_TIMEOUT`.
+
+## Errors
+
+RiftRelay returns standard HTTP status codes for invalid paths (`400`), admission rejection (`429`), upstream timeouts (`408`), and upstream failures (`502`). See [Endpoints](/docs/reference/endpoints#error-behavior) for the full error reference.
+
+## Best practices
+
+- Keep your Riot token only on the RiftRelay server
+- Send all Riot traffic through RiftRelay instead of mixing direct and proxied requests
+- Use normal priority by default; reserve `X-Priority: high` for latency-sensitive traffic
+
+## Next steps
+
+- [Configuration](/docs/reference/configuration): environment variables
+- [Endpoints](/docs/reference/endpoints): built-in routes and error reference

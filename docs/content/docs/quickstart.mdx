@@ -1,0 +1,74 @@
+---
+title: Quickstart
+description: Get RiftRelay running locally in a few minutes with Docker or from source.
+icon: Rocket
+---
+
+This guide gets RiftRelay running locally so you can start proxying Riot API requests right away.
+
+
+## Option 1: Docker
+
+The fastest way to get started is the setup script. It downloads the Docker Compose stack, prompts you for your Riot API token, and configures the stack. Start with `docker compose up -d`:
+
+```bash
+curl -fsSL "https://raw.githubusercontent.com/renja-g/RiftRelay/main/scripts/setup-docker-stack.sh" | bash
+```
+
+To start the stack after setup, run:
+
+```bash
+cd riftrelay-stack  # or the directory you used with --dir
+docker compose up -d
+```
+
+After startup, the main endpoints are:
+
+- RiftRelay: `http://localhost:8985`
+- Swagger UI: `http://localhost:8985/swagger/`
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3000`
+
+Grafana defaults to `admin` / `admin` in the generated stack.
+
+### Optional script flags
+
+```bash
+curl -fsSL "https://raw.githubusercontent.com/renja-g/RiftRelay/main/scripts/setup-docker-stack.sh" | \
+  bash -s -- --dir my-riftrelay-stack --no-metrics
+```
+
+Useful flags:
+
+- `--dir <path>`: change the output directory
+- `--token <value>`: provide `RIOT_TOKEN` non-interactively
+- `--image <value>`: override the Docker image
+- `--no-metrics`: skip Prometheus and Grafana
+- `--up`: start containers after setup (default is configure only)
+
+## Option 2: Run from source
+
+```bash
+export RIOT_TOKEN="your-riot-token"
+go run .
+```
+
+RiftRelay listens on `http://localhost:8985` by default.
+
+## Verify the service
+
+```bash
+curl -i "http://localhost:8985/healthz"
+```
+
+A healthy instance returns `204 No Content`.
+
+## Send a test request
+
+Example proxied request:
+
+```bash
+curl "http://localhost:8985/europe/riot/account/v1/accounts/by-riot-id/Someone/EUW1"
+```
+
+For request format, headers, priority behavior, and errors, see the [usage guide](/docs/guides/usage).
