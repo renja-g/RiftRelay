@@ -6,7 +6,7 @@ TARGET_DIR="riftrelay-stack"
 BASE_URL="${RIFTRELAY_BASE_URL:-$BASE_URL_DEFAULT}"
 TOKEN="${RIOT_TOKEN:-}"
 IMAGE="${RIFTRELAY_IMAGE:-}"
-AUTO_UP="true"
+AUTO_UP="false"
 METRICS="true"
 
 print_usage() {
@@ -19,7 +19,7 @@ Options:
   --token <value>              RIOT_TOKEN value
   --image <value>              RIFTRELAY_IMAGE value
   --no-metrics                 Skip Prometheus + Grafana (metrics profile)
-  --no-up                      Download/configure only, do not start containers
+  --up                         Start containers after setup (default: configure only)
   --help                       Show this help
 EOF
 }
@@ -46,8 +46,8 @@ while [ "$#" -gt 0 ]; do
       METRICS="false"
       shift
       ;;
-    --no-up)
-      AUTO_UP="false"
+    --up)
+      AUTO_UP="true"
       shift
       ;;
     --help)
