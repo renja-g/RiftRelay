@@ -1,0 +1,9 @@
+node_modules
+dist
+.git
+.gitignore
+.env*
+*.md
+.DS_Store
+.source
+src/pages.gen.ts
