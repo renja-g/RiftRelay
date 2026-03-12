@@ -52,13 +52,16 @@ func admissionMiddleware(
 
 			var tokenIndex *int
 			if val := r.Header.Get("X-Riot-Token-Index"); val != "" {
-				if parsed, err := strconv.Atoi(val); err == nil {
-					if parsed < 0 {
-						http.Error(w, "invalid X-Riot-Token-Index: must be >= 0", http.StatusBadRequest)
-						return
-					}
-					tokenIndex = &parsed
+				parsed, err := strconv.Atoi(val)
+				if err != nil {
+					http.Error(w, "invalid X-Riot-Token-Index: must be a number", http.StatusBadRequest)
+					return
 				}
+				if parsed < 0 {
+					http.Error(w, "invalid X-Riot-Token-Index: must be >= 0", http.StatusBadRequest)
+					return
+				}
+				tokenIndex = &parsed
 			}
 
 			admitCtx := r.Context()
@@ -78,6 +81,11 @@ func admissionMiddleware(
 			waitDuration := time.Since(start)
 
 			if err != nil {
+				if rejected, ok := err.(*limiter.RejectedError); ok && rejected.Reason == "invalid_token_index" {
+					http.Error(w, "invalid X-Riot-Token-Index: index out of range", http.StatusBadRequest)
+					return
+				}
+
 				if m != nil {
 					reason := "rejected"
 					if rejected, ok := err.(*limiter.RejectedError); ok {
