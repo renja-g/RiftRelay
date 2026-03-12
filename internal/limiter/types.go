@@ -23,7 +23,7 @@ type Admission struct {
 	Region     string
 	Bucket     string
 	Priority   Priority
-	TokenIndex int
+	TokenIndex *int
 }
 
 type Ticket struct {

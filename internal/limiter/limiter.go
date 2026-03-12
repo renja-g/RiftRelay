@@ -46,7 +46,7 @@ func (l *Limiter) Admit(ctx context.Context, admission Admission) (Ticket, error
 	if admission.Region == "" || admission.Bucket == "" {
 		return Ticket{}, &RejectedError{Reason: "invalid_route"}
 	}
-	if admission.TokenIndex >= l.cfg.KeyCount {
+	if admission.TokenIndex != nil && *admission.TokenIndex >= l.cfg.KeyCount {
 		return Ticket{}, &RejectedError{Reason: "invalid_token_index"}
 	}
 
@@ -289,13 +289,13 @@ func (l *Limiter) dispatch(bucket *bucketQueue, keys []keyState, wakeups *wakeHe
 	}
 }
 
-func (l *Limiter) pickKey(now time.Time, keys []keyState, region, bucket string, priority Priority, forcedTokenIndex int) (int, time.Time) {
+func (l *Limiter) pickKey(now time.Time, keys []keyState, region, bucket string, priority Priority, forcedTokenIndex *int) (int, time.Time) {
 	bestIndex := -1
 	bestAt := time.Time{}
 	bypassPacing := priority == PriorityHigh
 
 	for i := range keys {
-		if forcedTokenIndex >= 0 && i != forcedTokenIndex {
+		if forcedTokenIndex != nil && i != *forcedTokenIndex {
 			continue
 		}
 

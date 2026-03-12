@@ -50,14 +50,14 @@ func admissionMiddleware(
 				priority = limiter.PriorityHigh
 			}
 
-			tokenIndex := -1 // -1 means "any token"
+			var tokenIndex *int
 			if val := r.Header.Get("X-Riot-Token-Index"); val != "" {
 				if parsed, err := strconv.Atoi(val); err == nil {
 					if parsed < 0 {
 						http.Error(w, "invalid X-Riot-Token-Index: must be >= 0", http.StatusBadRequest)
 						return
 					}
-					tokenIndex = parsed
+					tokenIndex = &parsed
 				}
 			}
 

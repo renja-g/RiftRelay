@@ -40,7 +40,6 @@ func TestLimiterRejectsWhenQueueFull(t *testing.T) {
 			Region:     "na1",
 			Bucket:     "na1:lol/status/v4/platform-data",
 			Priority:   PriorityNormal,
-			TokenIndex: -1,
 		})
 		firstDone <- err
 	}()
@@ -54,7 +53,6 @@ func TestLimiterRejectsWhenQueueFull(t *testing.T) {
 		Region:     "na1",
 		Bucket:     "na1:lol/status/v4/platform-data",
 		Priority:   PriorityNormal,
-		TokenIndex: -1,
 	})
 	rejected, ok := err.(*RejectedError)
 	if !ok {
@@ -102,7 +100,6 @@ func TestLimiterHighPriorityWinsAfterWait(t *testing.T) {
 				Region:     "na1",
 				Bucket:     "na1:lol/match/v5/matches/by-puuid/abc/ids",
 				Priority:   priority,
-				TokenIndex: -1,
 			})
 			if err != nil {
 				results <- "error:" + name
@@ -177,7 +174,6 @@ func TestLimiterPriorityPacingBehavior(t *testing.T) {
 				Region:     "na1",
 				Bucket:     "na1:lol/status/v4/platform-data",
 				Priority:   tt.priority,
-				TokenIndex: -1,
 			}); err != nil {
 				t.Fatalf("first admit failed: %v", err)
 			}
@@ -187,7 +183,6 @@ func TestLimiterPriorityPacingBehavior(t *testing.T) {
 				Region:     "na1",
 				Bucket:     "na1:lol/status/v4/platform-data",
 				Priority:   tt.priority,
-				TokenIndex: -1,
 			}); err != nil {
 				t.Fatalf("second admit failed: %v", err)
 			}
@@ -250,7 +245,6 @@ func TestLimiterResumeAfterIdleTightensPacing(t *testing.T) {
 				Region:     "na1",
 				Bucket:     "na1:lol/status/v4/platform-data",
 				Priority:   PriorityNormal,
-				TokenIndex: -1,
 			}); err != nil {
 				t.Fatalf("%s admit failed: %v", label, err)
 			}
@@ -320,7 +314,6 @@ func TestLimiterQueuedRequestRecalculatesPacing(t *testing.T) {
 					Region:     "na1",
 					Bucket:     "na1:lol/status/v4/platform-data",
 					Priority:   PriorityNormal,
-					TokenIndex: -1,
 				}); err != nil {
 					t.Fatalf("first admit failed: %v", err)
 				}
@@ -330,7 +323,6 @@ func TestLimiterQueuedRequestRecalculatesPacing(t *testing.T) {
 					Region:     "na1",
 					Bucket:     "na1:lol/status/v4/platform-data",
 					Priority:   PriorityNormal,
-					TokenIndex: -1,
 				}); err != nil {
 					t.Fatalf("second admit failed: %v", err)
 				}
@@ -363,7 +355,6 @@ func TestLimiterQueuedRequestRecalculatesPacing(t *testing.T) {
 					Region:     "na1",
 					Bucket:     "na1:lol/status/v4/platform-data",
 					Priority:   PriorityNormal,
-					TokenIndex: -1,
 				}); err != nil {
 					t.Fatalf("first admit failed: %v", err)
 				}
@@ -376,7 +367,6 @@ func TestLimiterQueuedRequestRecalculatesPacing(t *testing.T) {
 						Region:     "na1",
 						Bucket:     "na1:lol/status/v4/platform-data",
 						Priority:   PriorityNormal,
-						TokenIndex: -1,
 					})
 					if err != nil {
 						errCh <- err
@@ -482,7 +472,6 @@ func TestLimiterPriorityBurstSlowsLaterNormalPacing(t *testing.T) {
 				Region:     "na1",
 				Bucket:     "na1:lol/status/v4/platform-data",
 				Priority:   priority,
-				TokenIndex: -1,
 			}); err != nil {
 				t.Fatalf("%s admit failed: %v", label, err)
 			}
@@ -546,7 +535,6 @@ func TestDefaultRateLimitsAppliedBeforeObservation(t *testing.T) {
 		Region:     "europe",
 		Bucket:     "europe:riot/account/v1/accounts/by-riot-id/test/123",
 		Priority:   PriorityNormal,
-		TokenIndex: -1,
 	}); err != nil {
 		t.Fatalf("first admit failed: %v", err)
 	}
@@ -557,7 +545,6 @@ func TestDefaultRateLimitsAppliedBeforeObservation(t *testing.T) {
 		Region:     "europe",
 		Bucket:     "europe:riot/account/v1/accounts/by-riot-id/test/456",
 		Priority:   PriorityNormal,
-		TokenIndex: -1,
 	}); err != nil {
 		t.Fatalf("second admit failed: %v", err)
 	}
@@ -603,7 +590,6 @@ func TestDefaultRateLimitsPreventBurstOnStartup(t *testing.T) {
 				Region:     "europe",
 				Bucket:     fmt.Sprintf("europe:riot/account/v1/accounts/by-riot-id/test/%d", idx),
 				Priority:   PriorityNormal,
-				TokenIndex: -1,
 			})
 			results <- result{idx: idx, err: err, wait: time.Since(reqStart)}
 		}(i)
@@ -675,7 +661,6 @@ func TestLimiterHighPriorityCutsInFrontOfQueuedNormals(t *testing.T) {
 				Region:     "na1",
 				Bucket:     "na1:lol/status/v4/platform-data",
 				Priority:   priority,
-				TokenIndex: -1,
 			})
 			results <- result{name: name, err: err}
 		}()
@@ -749,7 +734,6 @@ func TestLimiterRecoveryAfterBurst(t *testing.T) {
 				Region:     "europe",
 				Bucket:     "europe:riot/account/v1/accounts/by-riot-id/test/123",
 				Priority:   PriorityHigh,
-				TokenIndex: -1,
 			})
 			results <- burstResult{ticket: ticket, err: err}
 		}()
@@ -797,7 +781,6 @@ func TestLimiterRecoveryAfterBurst(t *testing.T) {
 		Region:     "europe",
 		Bucket:     "europe:riot/account/v1/accounts/by-riot-id/test/123",
 		Priority:   PriorityNormal,
-		TokenIndex: -1,
 	})
 	waited := time.Since(start)
 
