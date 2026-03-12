@@ -37,9 +37,9 @@ func TestLimiterRejectsWhenQueueFull(t *testing.T) {
 	firstDone := make(chan error, 1)
 	go func() {
 		_, err := l.Admit(firstCtx, Admission{
-			Region:   "na1",
-			Bucket:   "na1:lol/status/v4/platform-data",
-			Priority: PriorityNormal,
+			Region:     "na1",
+			Bucket:     "na1:lol/status/v4/platform-data",
+			Priority:   PriorityNormal,
 		})
 		firstDone <- err
 	}()
@@ -50,9 +50,9 @@ func TestLimiterRejectsWhenQueueFull(t *testing.T) {
 	secondCtx, cancelSecond := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancelSecond()
 	_, err = l.Admit(secondCtx, Admission{
-		Region:   "na1",
-		Bucket:   "na1:lol/status/v4/platform-data",
-		Priority: PriorityNormal,
+		Region:     "na1",
+		Bucket:     "na1:lol/status/v4/platform-data",
+		Priority:   PriorityNormal,
 	})
 	rejected, ok := err.(*RejectedError)
 	if !ok {
@@ -97,9 +97,9 @@ func TestLimiterHighPriorityWinsAfterWait(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 2500*time.Millisecond)
 			defer cancel()
 			_, err := l.Admit(ctx, Admission{
-				Region:   "na1",
-				Bucket:   "na1:lol/match/v5/matches/by-puuid/abc/ids",
-				Priority: priority,
+				Region:     "na1",
+				Bucket:     "na1:lol/match/v5/matches/by-puuid/abc/ids",
+				Priority:   priority,
 			})
 			if err != nil {
 				results <- "error:" + name
@@ -171,18 +171,18 @@ func TestLimiterPriorityPacingBehavior(t *testing.T) {
 			defer cancel()
 
 			if _, err := l.Admit(ctx, Admission{
-				Region:   "na1",
-				Bucket:   "na1:lol/status/v4/platform-data",
-				Priority: tt.priority,
+				Region:     "na1",
+				Bucket:     "na1:lol/status/v4/platform-data",
+				Priority:   tt.priority,
 			}); err != nil {
 				t.Fatalf("first admit failed: %v", err)
 			}
 
 			start := time.Now()
 			if _, err := l.Admit(ctx, Admission{
-				Region:   "na1",
-				Bucket:   "na1:lol/status/v4/platform-data",
-				Priority: tt.priority,
+				Region:     "na1",
+				Bucket:     "na1:lol/status/v4/platform-data",
+				Priority:   tt.priority,
 			}); err != nil {
 				t.Fatalf("second admit failed: %v", err)
 			}
@@ -242,9 +242,9 @@ func TestLimiterResumeAfterIdleTightensPacing(t *testing.T) {
 
 		admit := func(label string) {
 			if _, err := l.Admit(ctx, Admission{
-				Region:   "na1",
-				Bucket:   "na1:lol/status/v4/platform-data",
-				Priority: PriorityNormal,
+				Region:     "na1",
+				Bucket:     "na1:lol/status/v4/platform-data",
+				Priority:   PriorityNormal,
 			}); err != nil {
 				t.Fatalf("%s admit failed: %v", label, err)
 			}
@@ -311,18 +311,18 @@ func TestLimiterQueuedRequestRecalculatesPacing(t *testing.T) {
 				defer cancel()
 
 				if _, err := l.Admit(ctx, Admission{
-					Region:   "na1",
-					Bucket:   "na1:lol/status/v4/platform-data",
-					Priority: PriorityNormal,
+					Region:     "na1",
+					Bucket:     "na1:lol/status/v4/platform-data",
+					Priority:   PriorityNormal,
 				}); err != nil {
 					t.Fatalf("first admit failed: %v", err)
 				}
 
 				start := time.Now()
 				if _, err := l.Admit(ctx, Admission{
-					Region:   "na1",
-					Bucket:   "na1:lol/status/v4/platform-data",
-					Priority: PriorityNormal,
+					Region:     "na1",
+					Bucket:     "na1:lol/status/v4/platform-data",
+					Priority:   PriorityNormal,
 				}); err != nil {
 					t.Fatalf("second admit failed: %v", err)
 				}
@@ -352,9 +352,9 @@ func TestLimiterQueuedRequestRecalculatesPacing(t *testing.T) {
 				defer cancel()
 
 				if _, err := l.Admit(ctx, Admission{
-					Region:   "na1",
-					Bucket:   "na1:lol/status/v4/platform-data",
-					Priority: PriorityNormal,
+					Region:     "na1",
+					Bucket:     "na1:lol/status/v4/platform-data",
+					Priority:   PriorityNormal,
 				}); err != nil {
 					t.Fatalf("first admit failed: %v", err)
 				}
@@ -364,9 +364,9 @@ func TestLimiterQueuedRequestRecalculatesPacing(t *testing.T) {
 				go func() {
 					start := time.Now()
 					_, err := l.Admit(ctx, Admission{
-						Region:   "na1",
-						Bucket:   "na1:lol/status/v4/platform-data",
-						Priority: PriorityNormal,
+						Region:     "na1",
+						Bucket:     "na1:lol/status/v4/platform-data",
+						Priority:   PriorityNormal,
 					})
 					if err != nil {
 						errCh <- err
@@ -469,9 +469,9 @@ func TestLimiterPriorityBurstSlowsLaterNormalPacing(t *testing.T) {
 
 		admitWithPriority := func(label string, priority Priority) {
 			if _, err := l.Admit(ctx, Admission{
-				Region:   "na1",
-				Bucket:   "na1:lol/status/v4/platform-data",
-				Priority: priority,
+				Region:     "na1",
+				Bucket:     "na1:lol/status/v4/platform-data",
+				Priority:   priority,
 			}); err != nil {
 				t.Fatalf("%s admit failed: %v", label, err)
 			}
@@ -532,9 +532,9 @@ func TestDefaultRateLimitsAppliedBeforeObservation(t *testing.T) {
 
 	start := time.Now()
 	if _, err := l.Admit(ctx, Admission{
-		Region:   "europe",
-		Bucket:   "europe:riot/account/v1/accounts/by-riot-id/test/123",
-		Priority: PriorityNormal,
+		Region:     "europe",
+		Bucket:     "europe:riot/account/v1/accounts/by-riot-id/test/123",
+		Priority:   PriorityNormal,
 	}); err != nil {
 		t.Fatalf("first admit failed: %v", err)
 	}
@@ -542,9 +542,9 @@ func TestDefaultRateLimitsAppliedBeforeObservation(t *testing.T) {
 
 	start = time.Now()
 	if _, err := l.Admit(ctx, Admission{
-		Region:   "europe",
-		Bucket:   "europe:riot/account/v1/accounts/by-riot-id/test/456",
-		Priority: PriorityNormal,
+		Region:     "europe",
+		Bucket:     "europe:riot/account/v1/accounts/by-riot-id/test/456",
+		Priority:   PriorityNormal,
 	}); err != nil {
 		t.Fatalf("second admit failed: %v", err)
 	}
@@ -587,9 +587,9 @@ func TestDefaultRateLimitsPreventBurstOnStartup(t *testing.T) {
 		go func(idx int) {
 			reqStart := time.Now()
 			_, err := l.Admit(ctx, Admission{
-				Region:   "europe",
-				Bucket:   fmt.Sprintf("europe:riot/account/v1/accounts/by-riot-id/test/%d", idx),
-				Priority: PriorityNormal,
+				Region:     "europe",
+				Bucket:     fmt.Sprintf("europe:riot/account/v1/accounts/by-riot-id/test/%d", idx),
+				Priority:   PriorityNormal,
 			})
 			results <- result{idx: idx, err: err, wait: time.Since(reqStart)}
 		}(i)
@@ -658,9 +658,9 @@ func TestLimiterHighPriorityCutsInFrontOfQueuedNormals(t *testing.T) {
 	launch := func(name string, priority Priority) {
 		go func() {
 			_, err := l.Admit(ctx, Admission{
-				Region:   "na1",
-				Bucket:   "na1:lol/status/v4/platform-data",
-				Priority: priority,
+				Region:     "na1",
+				Bucket:     "na1:lol/status/v4/platform-data",
+				Priority:   priority,
 			})
 			results <- result{name: name, err: err}
 		}()
@@ -731,9 +731,9 @@ func TestLimiterRecoveryAfterBurst(t *testing.T) {
 	for i := 0; i < burstSize; i++ {
 		go func() {
 			ticket, err := l.Admit(ctx, Admission{
-				Region:   "europe",
-				Bucket:   "europe:riot/account/v1/accounts/by-riot-id/test/123",
-				Priority: PriorityHigh,
+				Region:     "europe",
+				Bucket:     "europe:riot/account/v1/accounts/by-riot-id/test/123",
+				Priority:   PriorityHigh,
 			})
 			results <- burstResult{ticket: ticket, err: err}
 		}()
@@ -778,9 +778,9 @@ func TestLimiterRecoveryAfterBurst(t *testing.T) {
 
 	start := time.Now()
 	_, err = l.Admit(normalCtx, Admission{
-		Region:   "europe",
-		Bucket:   "europe:riot/account/v1/accounts/by-riot-id/test/123",
-		Priority: PriorityNormal,
+		Region:     "europe",
+		Bucket:     "europe:riot/account/v1/accounts/by-riot-id/test/123",
+		Priority:   PriorityNormal,
 	})
 	waited := time.Since(start)
 

@@ -46,6 +46,9 @@ func (l *Limiter) Admit(ctx context.Context, admission Admission) (Ticket, error
 	if admission.Region == "" || admission.Bucket == "" {
 		return Ticket{}, &RejectedError{Reason: "invalid_route"}
 	}
+	if admission.TokenIndex != nil && (*admission.TokenIndex < 0 || *admission.TokenIndex >= l.cfg.KeyCount) {
+		return Ticket{}, &RejectedError{Reason: "invalid_token_index"}
+	}
 
 	req := &admitRequest{
 		ctx:       ctx,
@@ -165,7 +168,7 @@ func (l *Limiter) handleAdmit(
 
 	if bucket.depth() >= l.cfg.QueueCapacity {
 		now := l.cfg.Clock.Now()
-		_, earliest := l.pickKey(now, keys, bucket.region, bucket.bucket, req.admission.Priority)
+		_, earliest := l.pickKey(now, keys, bucket.region, bucket.bucket, req.admission.Priority, req.admission.TokenIndex)
 		req.resp <- admitResponse{
 			err: &RejectedError{
 				Reason:     "queue_full",
@@ -242,56 +245,104 @@ func (l *Limiter) dispatch(bucket *bucketQueue, keys []keyState, wakeups *wakeHe
 		return
 	}
 
+	var skippedHigh []*admitRequest
+	var skippedNormal []*admitRequest
+	var earliestWake time.Time
+
 	for {
 		req := bucket.dequeueValid()
 		if req == nil {
-			removeWake(wakeups, bucket)
-			return
+			break
 		}
 
 		now := l.cfg.Clock.Now()
-		keyIndex, earliest := l.pickKey(now, keys, bucket.region, bucket.bucket, req.admission.Priority)
+		keyIndex, earliest := l.pickKey(now, keys, bucket.region, bucket.bucket, req.admission.Priority, req.admission.TokenIndex)
 		if keyIndex < 0 {
 			req.resp <- admitResponse{err: &RejectedError{Reason: "no_available_key", RetryAfter: time.Second}}
 			continue
 		}
 
 		if earliest.After(now) {
-			// Put request back at head of corresponding queue.
+			if earliestWake.IsZero() || earliest.Before(earliestWake) {
+				earliestWake = earliest
+			}
+
+			if req.admission.TokenIndex != nil {
+				// Forced token not ready; skip and try next request.
+				if req.admission.Priority == PriorityHigh {
+					skippedHigh = append(skippedHigh, req)
+				} else {
+					skippedNormal = append(skippedNormal, req)
+				}
+				continue
+			}
+
+			// Put request back at head of corresponding queue and stop.
 			if req.admission.Priority == PriorityHigh {
 				bucket.high = append([]*admitRequest{req}, bucket.high...)
 			} else {
 				bucket.normal = append([]*admitRequest{req}, bucket.normal...)
 			}
-			upsertWake(wakeups, bucket, earliest)
-			return
+			break
 		}
 
 		key := &keys[keyIndex]
 		if !key.app(bucket.region, now, l.cfg.AdditionalWindow).consume(now) || !key.method(bucket.bucket, now, l.cfg.AdditionalWindow).consume(now) {
-			upsertWake(wakeups, bucket, now.Add(5*time.Millisecond))
+			wakeTime := now.Add(5 * time.Millisecond)
+			if earliestWake.IsZero() || wakeTime.Before(earliestWake) {
+				earliestWake = wakeTime
+			}
+
+			if req.admission.TokenIndex != nil {
+				// Consumption failed for forced token; skip and try next request.
+				if req.admission.Priority == PriorityHigh {
+					skippedHigh = append(skippedHigh, req)
+				} else {
+					skippedNormal = append(skippedNormal, req)
+				}
+				continue
+			}
+
 			// Put request back and retry at next wake-up.
 			if req.admission.Priority == PriorityHigh {
 				bucket.high = append([]*admitRequest{req}, bucket.high...)
 			} else {
 				bucket.normal = append([]*admitRequest{req}, bucket.normal...)
 			}
-			return
+			break
 		}
 
 		req.resp <- admitResponse{ticket: Ticket{KeyIndex: keyIndex}}
 		if metrics := l.cfg.Metrics; metrics != nil {
-			metrics.ObserveQueueDepth(bucket.bucket, req.admission.Priority, bucket.depth())
+			metrics.ObserveQueueDepth(bucket.bucket, req.admission.Priority, bucket.depth()+len(skippedHigh)+len(skippedNormal))
 		}
+	}
+
+	// Restore skipped requests to the front of their respective queues.
+	if len(skippedHigh) > 0 {
+		bucket.high = append(skippedHigh, bucket.high...)
+	}
+	if len(skippedNormal) > 0 {
+		bucket.normal = append(skippedNormal, bucket.normal...)
+	}
+
+	if bucket.depth() == 0 {
+		removeWake(wakeups, bucket)
+	} else if !earliestWake.IsZero() {
+		upsertWake(wakeups, bucket, earliestWake)
 	}
 }
 
-func (l *Limiter) pickKey(now time.Time, keys []keyState, region, bucket string, priority Priority) (int, time.Time) {
+func (l *Limiter) pickKey(now time.Time, keys []keyState, region, bucket string, priority Priority, forcedTokenIndex *int) (int, time.Time) {
 	bestIndex := -1
 	bestAt := time.Time{}
 	bypassPacing := priority == PriorityHigh
 
 	for i := range keys {
+		if forcedTokenIndex != nil && i != *forcedTokenIndex {
+			continue
+		}
+
 		key := &keys[i]
 		appAt := key.app(region, now, l.cfg.AdditionalWindow).nextAllowed(now, bypassPacing)
 		methodAt := key.method(bucket, now, l.cfg.AdditionalWindow).nextAllowed(now, bypassPacing)

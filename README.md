@@ -45,6 +45,12 @@ For high-priority requests, add the `X-Priority: high` header to bypass pacing d
 curl -H "X-Priority: high" "http://localhost:8985/europe/riot/account/v1/accounts/by-riot-id/Someone/EUW1"
 ```
 
+To force a request to use a specific API token from the `RIOT_TOKEN` pool, use the `X-Riot-Token-Index` header (0-indexed). This is useful if you provide multiple tokens using `RIOT_TOKEN=a,b,c` and want to explicitly use a specific one for certain requests:
+
+```bash
+curl -H "X-Riot-Token-Index: 0" "http://localhost:8985/europe/riot/account/v1/accounts/by-riot-id/Someone/EUW1"
+```
+
 You can also explore and send API requests through the Swagger UI at `http://localhost:8985/swagger/` (enabled by default).
 
 <img width="1440" height="783" alt="image" src="https://github.com/user-attachments/assets/4dc41b61-1cc7-419e-80c6-0c93cf213f0d" />
