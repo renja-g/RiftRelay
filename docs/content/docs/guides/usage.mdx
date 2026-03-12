@@ -36,7 +36,7 @@ Send `X-Priority: high` for latency-sensitive requests. It bypasses pacing delay
 
 ### `X-Riot-Token-Index`
 
-If you have multiple API tokens configured (e.g., `RIOT_TOKEN=a,b,c`), you can force RiftRelay to use a specific token for a request by passing its 0-based index. For example, `X-Riot-Token-Index: 0` will use the first token in the configuration list. If the index is omitted, invalid, or out of bounds, RiftRelay will intelligently select the best available token as usual.
+If you have multiple API tokens configured (e.g., `RIOT_TOKEN=a,b,c`), you can force RiftRelay to use a specific token for a request by passing its 0-based index. For example, `X-Riot-Token-Index: 0` will use the first token in the configuration list. If the index is omitted, RiftRelay will intelligently select the best available token as usual. If the index is invalid or out of bounds, RiftRelay returns `400 Bad Request`.
 
 ## Timeouts
 
