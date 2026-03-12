@@ -46,6 +46,9 @@ func (l *Limiter) Admit(ctx context.Context, admission Admission) (Ticket, error
 	if admission.Region == "" || admission.Bucket == "" {
 		return Ticket{}, &RejectedError{Reason: "invalid_route"}
 	}
+	if admission.TokenIndex >= l.cfg.KeyCount {
+		return Ticket{}, &RejectedError{Reason: "invalid_token_index"}
+	}
 
 	req := &admitRequest{
 		ctx:       ctx,
@@ -165,7 +168,7 @@ func (l *Limiter) handleAdmit(
 
 	if bucket.depth() >= l.cfg.QueueCapacity {
 		now := l.cfg.Clock.Now()
-		_, earliest := l.pickKey(now, keys, bucket.region, bucket.bucket, req.admission.Priority)
+		_, earliest := l.pickKey(now, keys, bucket.region, bucket.bucket, req.admission.Priority, req.admission.TokenIndex)
 		req.resp <- admitResponse{
 			err: &RejectedError{
 				Reason:     "queue_full",
@@ -250,7 +253,7 @@ func (l *Limiter) dispatch(bucket *bucketQueue, keys []keyState, wakeups *wakeHe
 		}
 
 		now := l.cfg.Clock.Now()
-		keyIndex, earliest := l.pickKey(now, keys, bucket.region, bucket.bucket, req.admission.Priority)
+		keyIndex, earliest := l.pickKey(now, keys, bucket.region, bucket.bucket, req.admission.Priority, req.admission.TokenIndex)
 		if keyIndex < 0 {
 			req.resp <- admitResponse{err: &RejectedError{Reason: "no_available_key", RetryAfter: time.Second}}
 			continue
@@ -286,12 +289,16 @@ func (l *Limiter) dispatch(bucket *bucketQueue, keys []keyState, wakeups *wakeHe
 	}
 }
 
-func (l *Limiter) pickKey(now time.Time, keys []keyState, region, bucket string, priority Priority) (int, time.Time) {
+func (l *Limiter) pickKey(now time.Time, keys []keyState, region, bucket string, priority Priority, forcedTokenIndex int) (int, time.Time) {
 	bestIndex := -1
 	bestAt := time.Time{}
 	bypassPacing := priority == PriorityHigh
 
 	for i := range keys {
+		if forcedTokenIndex >= 0 && i != forcedTokenIndex {
+			continue
+		}
+
 		key := &keys[i]
 		appAt := key.app(region, now, l.cfg.AdditionalWindow).nextAllowed(now, bypassPacing)
 		methodAt := key.method(bucket, now, l.cfg.AdditionalWindow).nextAllowed(now, bypassPacing)

@@ -50,6 +50,13 @@ func admissionMiddleware(
 				priority = limiter.PriorityHigh
 			}
 
+			tokenIndex := -1 // -1 means "any token"
+			if val := r.Header.Get("X-Riot-Token-Index"); val != "" {
+				if parsed, err := strconv.Atoi(val); err == nil {
+					tokenIndex = parsed
+				}
+			}
+
 			admitCtx := r.Context()
 			cancel := func() {}
 			if timeout > 0 {
@@ -59,9 +66,10 @@ func admissionMiddleware(
 
 			start := time.Now()
 			ticket, err := l.Admit(admitCtx, limiter.Admission{
-				Region:   info.Region,
-				Bucket:   info.Bucket,
-				Priority: priority,
+				Region:     info.Region,
+				Bucket:     info.Bucket,
+				Priority:   priority,
+				TokenIndex: tokenIndex,
 			})
 			waitDuration := time.Since(start)
 

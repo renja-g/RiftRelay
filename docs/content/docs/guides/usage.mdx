@@ -34,6 +34,10 @@ RiftRelay injects the Riot API token from the configured `RIOT_TOKEN`. Do not se
 
 Send `X-Priority: high` for latency-sensitive requests. It bypasses pacing delay but still respects rate limits. See [priority requests](/docs/guides/priority-requests).
 
+### `X-Riot-Token-Index`
+
+If you have multiple API tokens configured (e.g., `RIOT_TOKEN=a,b,c`), you can force RiftRelay to use a specific token for a request by passing its 0-based index. For example, `X-Riot-Token-Index: 0` will use the first token in the configuration list. If the index is omitted, invalid, or out of bounds, RiftRelay will intelligently select the best available token as usual.
+
 ## Timeouts
 
 Requests may wait in the admission queue before forwarding. See [Configuration](/docs/reference/configuration) for `ADMISSION_TIMEOUT` and `UPSTREAM_TIMEOUT`.
