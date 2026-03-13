@@ -249,6 +249,19 @@ func (l *Limiter) dispatch(bucket *bucketQueue, keys []keyState, wakeups *wakeHe
 	var skippedNormal []*admitRequest
 	var earliestWake time.Time
 
+	updateWake := func(t time.Time) {
+		if !t.IsZero() && (earliestWake.IsZero() || t.Before(earliestWake)) {
+			earliestWake = t
+		}
+	}
+	appendSkipped := func(req *admitRequest) {
+		if req.admission.Priority == PriorityHigh {
+			skippedHigh = append(skippedHigh, req)
+		} else {
+			skippedNormal = append(skippedNormal, req)
+		}
+	}
+
 	for {
 		req := bucket.dequeueValid()
 		if req == nil {
@@ -262,53 +275,27 @@ func (l *Limiter) dispatch(bucket *bucketQueue, keys []keyState, wakeups *wakeHe
 			continue
 		}
 
+		var cannotServe bool
+		var wakeAt time.Time
+
 		if earliest.After(now) {
-			if earliestWake.IsZero() || earliest.Before(earliestWake) {
-				earliestWake = earliest
+			cannotServe = true
+			wakeAt = earliest
+		} else {
+			key := &keys[keyIndex]
+			if !key.app(bucket.region, now, l.cfg.AdditionalWindow).consume(now) || !key.method(bucket.bucket, now, l.cfg.AdditionalWindow).consume(now) {
+				cannotServe = true
+				wakeAt = now.Add(5 * time.Millisecond)
 			}
-
-			if req.admission.TokenIndex != nil {
-				// Forced token not ready; skip and try next request.
-				if req.admission.Priority == PriorityHigh {
-					skippedHigh = append(skippedHigh, req)
-				} else {
-					skippedNormal = append(skippedNormal, req)
-				}
-				continue
-			}
-
-			// Put request back at head of corresponding queue and stop.
-			if req.admission.Priority == PriorityHigh {
-				bucket.high = append([]*admitRequest{req}, bucket.high...)
-			} else {
-				bucket.normal = append([]*admitRequest{req}, bucket.normal...)
-			}
-			break
 		}
 
-		key := &keys[keyIndex]
-		if !key.app(bucket.region, now, l.cfg.AdditionalWindow).consume(now) || !key.method(bucket.bucket, now, l.cfg.AdditionalWindow).consume(now) {
-			wakeTime := now.Add(5 * time.Millisecond)
-			if earliestWake.IsZero() || wakeTime.Before(earliestWake) {
-				earliestWake = wakeTime
-			}
-
+		if cannotServe {
+			updateWake(wakeAt)
 			if req.admission.TokenIndex != nil {
-				// Consumption failed for forced token; skip and try next request.
-				if req.admission.Priority == PriorityHigh {
-					skippedHigh = append(skippedHigh, req)
-				} else {
-					skippedNormal = append(skippedNormal, req)
-				}
+				appendSkipped(req)
 				continue
 			}
-
-			// Put request back and retry at next wake-up.
-			if req.admission.Priority == PriorityHigh {
-				bucket.high = append([]*admitRequest{req}, bucket.high...)
-			} else {
-				bucket.normal = append([]*admitRequest{req}, bucket.normal...)
-			}
+			bucket.prepend(req)
 			break
 		}
 
@@ -318,7 +305,7 @@ func (l *Limiter) dispatch(bucket *bucketQueue, keys []keyState, wakeups *wakeHe
 		}
 	}
 
-	// Restore skipped requests to the front of their respective queues.
+	// Restore skipped pinned requests to the front of their respective queues.
 	if len(skippedHigh) > 0 {
 		bucket.high = append(skippedHigh, bucket.high...)
 	}
