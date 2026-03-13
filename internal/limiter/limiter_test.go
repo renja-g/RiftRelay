@@ -8,6 +8,339 @@ import (
 	"time"
 )
 
+func intPtr(i int) *int { return &i }
+
+func TestLimiterPinnedKeySelection(t *testing.T) {
+	tests := []struct {
+		name       string
+		tokenIndex int
+	}{
+		{"pinned_to_key_0", 0},
+		{"pinned_to_key_1", 1},
+		{"pinned_to_key_2", 2},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			l, err := New(Config{
+				KeyCount:         3,
+				QueueCapacity:    8,
+				AdditionalWindow: 0,
+			})
+			if err != nil {
+				t.Fatalf("new limiter: %v", err)
+			}
+			defer l.Close()
+
+			headers := make(http.Header)
+			headers.Set("X-Method-Rate-Limit", "20:1")
+			headers.Set("X-Method-Rate-Limit-Count", "0:1")
+			l.Observe(Observation{
+				Region:     "na1",
+				Bucket:     "na1:lol/status/v4/platform-data",
+				KeyIndex:   tt.tokenIndex,
+				StatusCode: http.StatusOK,
+				Header:     headers,
+			})
+			time.Sleep(20 * time.Millisecond)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+
+			ticket, err := l.Admit(ctx, Admission{
+				Region:     "na1",
+				Bucket:     "na1:lol/status/v4/platform-data",
+				Priority:   PriorityNormal,
+				TokenIndex: intPtr(tt.tokenIndex),
+			})
+			if err != nil {
+				t.Fatalf("admit failed: %v", err)
+			}
+			if ticket.KeyIndex != tt.tokenIndex {
+				t.Fatalf("expected KeyIndex=%d, got %d", tt.tokenIndex, ticket.KeyIndex)
+			}
+		})
+	}
+}
+
+func TestLimiterPinnedDoesNotBlock(t *testing.T) {
+	// When a pinned request at the head cannot be served (its key exhausted),
+	// subsequent non-pinned requests must be served by other keys.
+	l, err := New(Config{
+		KeyCount:         2,
+		QueueCapacity:    8,
+		AdditionalWindow: 0,
+	})
+	if err != nil {
+		t.Fatalf("new limiter: %v", err)
+	}
+	defer l.Close()
+
+	// Exhaust key 0 (method limit 1:1, count 1:1)
+	exhausted := make(http.Header)
+	exhausted.Set("X-Method-Rate-Limit", "1:1")
+	exhausted.Set("X-Method-Rate-Limit-Count", "1:1")
+	l.Observe(Observation{
+		Region:     "na1",
+		Bucket:     "na1:lol/status/v4/platform-data",
+		KeyIndex:   0,
+		StatusCode: http.StatusOK,
+		Header:     exhausted,
+	})
+	// Give key 1 capacity
+	available := make(http.Header)
+	available.Set("X-Method-Rate-Limit", "1:1")
+	available.Set("X-Method-Rate-Limit-Count", "0:1")
+	l.Observe(Observation{
+		Region:     "na1",
+		Bucket:     "na1:lol/status/v4/platform-data",
+		KeyIndex:   1,
+		StatusCode: http.StatusOK,
+		Header:     available,
+	})
+	time.Sleep(20 * time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	type result struct {
+		ticket Ticket
+		err    error
+	}
+	pinnedCh := make(chan result, 1)
+	nonPinnedCh := make(chan result, 1)
+
+	go func() {
+		ticket, err := l.Admit(ctx, Admission{
+			Region:     "na1",
+			Bucket:     "na1:lol/status/v4/platform-data",
+			Priority:   PriorityNormal,
+			TokenIndex: intPtr(0),
+		})
+		pinnedCh <- result{ticket: ticket, err: err}
+	}()
+	time.Sleep(10 * time.Millisecond)
+
+	go func() {
+		ticket, err := l.Admit(ctx, Admission{
+			Region:   "na1",
+			Bucket:   "na1:lol/status/v4/platform-data",
+			Priority: PriorityNormal,
+		})
+		nonPinnedCh <- result{ticket: ticket, err: err}
+	}()
+
+	// Non-pinned should be admitted first (within 500ms) using key 1
+	select {
+	case r := <-nonPinnedCh:
+		if r.err != nil {
+			t.Fatalf("non-pinned request failed: %v", r.err)
+		}
+		if r.ticket.KeyIndex != 1 {
+			t.Fatalf("expected non-pinned to use key 1, got key %d", r.ticket.KeyIndex)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatalf("non-pinned request did not complete within 500ms (pinned blocked the queue)")
+	}
+
+	// Pinned is still queued (key 0 exhausted). Wait for it with longer timeout or cancel.
+	select {
+	case r := <-pinnedCh:
+		if r.err != nil {
+			t.Fatalf("pinned request eventually failed: %v", r.err)
+		}
+		if r.ticket.KeyIndex != 0 {
+			t.Fatalf("expected pinned to use key 0, got key %d", r.ticket.KeyIndex)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("pinned request did not complete within 2s (key 0 may need observation to recover)")
+	}
+}
+
+func TestLimiterPinnedMultipleDoesNotBlock(t *testing.T) {
+	// Multiple pinned requests to the same exhausted key at the head must not
+	// block a non-pinned request behind them.
+	l, err := New(Config{
+		KeyCount:         2,
+		QueueCapacity:    8,
+		AdditionalWindow: 0,
+	})
+	if err != nil {
+		t.Fatalf("new limiter: %v", err)
+	}
+	defer l.Close()
+
+	exhausted := make(http.Header)
+	exhausted.Set("X-Method-Rate-Limit", "1:1")
+	exhausted.Set("X-Method-Rate-Limit-Count", "1:1")
+	l.Observe(Observation{
+		Region:     "na1",
+		Bucket:     "na1:lol/status/v4/platform-data",
+		KeyIndex:   0,
+		StatusCode: http.StatusOK,
+		Header:     exhausted,
+	})
+	available := make(http.Header)
+	available.Set("X-Method-Rate-Limit", "1:1")
+	available.Set("X-Method-Rate-Limit-Count", "0:1")
+	l.Observe(Observation{
+		Region:     "na1",
+		Bucket:     "na1:lol/status/v4/platform-data",
+		KeyIndex:   1,
+		StatusCode: http.StatusOK,
+		Header:     available,
+	})
+	time.Sleep(20 * time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	nonPinnedCh := make(chan *Ticket, 1)
+	go func() {
+		ticket, err := l.Admit(ctx, Admission{
+			Region:   "na1",
+			Bucket:   "na1:lol/status/v4/platform-data",
+			Priority: PriorityNormal,
+		})
+		if err != nil {
+			return
+		}
+		nonPinnedCh <- &ticket
+	}()
+
+	// Enqueue two pinned (to key 0) before the non-pinned gets a chance.
+	// Launch pinned first, small delay, launch second pinned, small delay, non-pinned is already running.
+	for i := 0; i < 2; i++ {
+		go func() {
+			_, _ = l.Admit(ctx, Admission{
+				Region:     "na1",
+				Bucket:     "na1:lol/status/v4/platform-data",
+				Priority:   PriorityNormal,
+				TokenIndex: intPtr(0),
+			})
+		}()
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	// Non-pinned should be admitted using key 1 within 500ms
+	select {
+	case ticket := <-nonPinnedCh:
+		if ticket.KeyIndex != 1 {
+			t.Fatalf("expected non-pinned to use key 1, got key %d", ticket.KeyIndex)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatalf("non-pinned request did not complete within 500ms (pinned requests blocked the queue)")
+	}
+}
+
+func TestLimiterPinnedInvalidTokenIndexRejected(t *testing.T) {
+	tests := []struct {
+		name       string
+		tokenIndex int
+	}{
+		{"index_out_of_range", 2},
+		{"index_negative", -1},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			l, err := New(Config{
+				KeyCount:         2,
+				QueueCapacity:    8,
+				AdditionalWindow: 0,
+			})
+			if err != nil {
+				t.Fatalf("new limiter: %v", err)
+			}
+			defer l.Close()
+
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+
+			_, err = l.Admit(ctx, Admission{
+				Region:     "na1",
+				Bucket:     "na1:lol/status/v4/platform-data",
+				Priority:   PriorityNormal,
+				TokenIndex: intPtr(tt.tokenIndex),
+			})
+			rejected, ok := err.(*RejectedError)
+			if !ok {
+				t.Fatalf("expected RejectedError, got %T (%v)", err, err)
+			}
+			if rejected.Reason != "invalid_token_index" {
+				t.Fatalf("expected Reason=invalid_token_index, got %q", rejected.Reason)
+			}
+		})
+	}
+}
+
+func TestLimiterPinnedEventuallyServedWhenKeyRecovers(t *testing.T) {
+	// Pinned requests are retried and served when their key becomes available.
+	l, err := New(Config{
+		KeyCount:         2,
+		QueueCapacity:    8,
+		AdditionalWindow: 0,
+	})
+	if err != nil {
+		t.Fatalf("new limiter: %v", err)
+	}
+	defer l.Close()
+
+	exhausted := make(http.Header)
+	exhausted.Set("X-Method-Rate-Limit", "1:1")
+	exhausted.Set("X-Method-Rate-Limit-Count", "1:1")
+	l.Observe(Observation{
+		Region:     "na1",
+		Bucket:     "na1:lol/status/v4/platform-data",
+		KeyIndex:   0,
+		StatusCode: http.StatusOK,
+		Header:     exhausted,
+	})
+	time.Sleep(20 * time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	type pinnedResult struct {
+		ticket Ticket
+		err    error
+	}
+	pinnedCh := make(chan pinnedResult, 1)
+	go func() {
+		ticket, err := l.Admit(ctx, Admission{
+			Region:     "na1",
+			Bucket:     "na1:lol/status/v4/platform-data",
+			Priority:   PriorityNormal,
+			TokenIndex: intPtr(0),
+		})
+		pinnedCh <- pinnedResult{ticket: ticket, err: err}
+	}()
+
+	// Feed observation to reset key 0's method limit (simulating upstream response)
+	recovered := make(http.Header)
+	recovered.Set("X-Method-Rate-Limit", "1:1")
+	recovered.Set("X-Method-Rate-Limit-Count", "0:1")
+	l.Observe(Observation{
+		Region:     "na1",
+		Bucket:     "na1:lol/status/v4/platform-data",
+		KeyIndex:   0,
+		StatusCode: http.StatusOK,
+		Header:     recovered,
+	})
+
+	select {
+	case r := <-pinnedCh:
+		if r.err != nil {
+			t.Fatalf("pinned request failed: %v", r.err)
+		}
+		if r.ticket.KeyIndex != 0 {
+			t.Fatalf("expected pinned to use key 0, got key %d", r.ticket.KeyIndex)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("pinned request did not complete within 2s after key recovery")
+	}
+}
+
 func TestLimiterRejectsWhenQueueFull(t *testing.T) {
 	l, err := New(Config{
 		KeyCount:         1,
