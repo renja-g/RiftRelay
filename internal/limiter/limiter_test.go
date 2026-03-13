@@ -195,6 +195,19 @@ func TestLimiterPinnedMultipleDoesNotBlock(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
+	// Launch pinned first so they occupy the head of the queue; non-pinned follows behind.
+	for i := 0; i < 2; i++ {
+		go func() {
+			_, _ = l.Admit(ctx, Admission{
+				Region:     "na1",
+				Bucket:     "na1:lol/status/v4/platform-data",
+				Priority:   PriorityNormal,
+				TokenIndex: intPtr(0),
+			})
+		}()
+		time.Sleep(10 * time.Millisecond)
+	}
+
 	nonPinnedCh := make(chan *Ticket, 1)
 	go func() {
 		ticket, err := l.Admit(ctx, Admission{
@@ -207,20 +220,6 @@ func TestLimiterPinnedMultipleDoesNotBlock(t *testing.T) {
 		}
 		nonPinnedCh <- &ticket
 	}()
-
-	// Enqueue two pinned (to key 0) before the non-pinned gets a chance.
-	// Launch pinned first, small delay, launch second pinned, small delay, non-pinned is already running.
-	for i := 0; i < 2; i++ {
-		go func() {
-			_, _ = l.Admit(ctx, Admission{
-				Region:     "na1",
-				Bucket:     "na1:lol/status/v4/platform-data",
-				Priority:   PriorityNormal,
-				TokenIndex: intPtr(0),
-			})
-		}()
-		time.Sleep(5 * time.Millisecond)
-	}
 
 	// Non-pinned should be admitted using key 1 within 500ms
 	select {
