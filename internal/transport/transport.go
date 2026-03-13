@@ -12,12 +12,12 @@ import (
 )
 
 const (
-	defaultDialTimeout        = 5 * time.Second
-	defaultDialKeepAlive      = 30 * time.Second
-	defaultMaxIdleConns       = 512
-	defaultMaxIdleConnsPerHost = 256
-	defaultIdleConnTimeout    = 90 * time.Second
-	defaultTLSHandshakeTimeout = 10 * time.Second
+	defaultDialTimeout           = 5 * time.Second
+	defaultDialKeepAlive         = 30 * time.Second
+	defaultMaxIdleConns          = 512
+	defaultMaxIdleConnsPerHost   = 256
+	defaultIdleConnTimeout       = 90 * time.Second
+	defaultTLSHandshakeTimeout   = 10 * time.Second
 	defaultExpectContinueTimeout = 1 * time.Second
 	defaultResponseHeaderTimeout = 15 * time.Second
 )
