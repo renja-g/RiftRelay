@@ -26,6 +26,15 @@ func (b *bucketQueue) enqueue(req *admitRequest) {
 	b.normal = append(b.normal, req)
 }
 
+// prepend returns req to the front of its priority queue without consuming.
+func (b *bucketQueue) prepend(req *admitRequest) {
+	if req.admission.Priority == PriorityHigh {
+		b.high = append([]*admitRequest{req}, b.high...)
+	} else {
+		b.normal = append([]*admitRequest{req}, b.normal...)
+	}
+}
+
 func (b *bucketQueue) dequeueValid() *admitRequest {
 	for len(b.high) > 0 {
 		req := b.high[0]
