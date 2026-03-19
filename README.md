@@ -95,6 +95,8 @@ If there's no room in the rate limit window, RiftRelay returns `429 Too Many Req
 
 ## Development
 
+Prerequisites: **Go 1.26** (see `go.mod`). For local runs or Docker Compose, copy `.env.example` to `.env`, set `RIOT_TOKEN`, then start the server with `./scripts/dev.sh` (loads `.env` and runs `go run .`) or `docker compose up --build`.
+
 Run tests:
 
 ```bash
