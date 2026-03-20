@@ -2,5 +2,5 @@ services:
   docs:
     build: .
     ports:
-      - "3000:80"
+      - "4578:80"
     restart: unless-stopped
