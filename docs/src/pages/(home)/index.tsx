@@ -13,19 +13,13 @@ export default function Home() {
           RiftRelay Docs
         </h1>
 
+        <p className="mt-6 max-w-2xl text-base text-fd-muted-foreground sm:text-lg">
+          RiftRelay is a rate-limiting proxy for the Riot Games API built in Go.
+          It helps you smooth traffic, share your Riot API token, and expose
+          Swagger UI, metrics, and profiling endpoints from one service.
+        </p>
+
         <div className="mt-5 w-full max-w-4xl">
-          <h2 className="text-center text-base font-semibold tracking-tight sm:text-lg">
-            Where RiftRelay sits
-          </h2>
-          <p className="mx-auto mt-1.5 max-w-2xl text-center text-xs text-fd-muted-foreground sm:text-sm">
-            Your apps send Riot API traffic through one place: it enforces
-            Riot&apos;s rate limits, then queues and paces what&apos;s allowed,
-            with optional{" "}
-            <code className="rounded bg-fd-muted px-1 py-0.5 text-xs">
-              X-Priority: high
-            </code>{" "}
-            for urgent calls.
-          </p>
           <Mermaid
             className="!my-4 [&_svg]:max-h-[min(56vh,440px)] [&_svg]:w-auto [&_svg]:max-w-full"
             chart={`
@@ -45,12 +39,6 @@ flowchart LR
 `}
           />
         </div>
-
-        <p className="mt-6 max-w-2xl text-base text-fd-muted-foreground sm:text-lg">
-          RiftRelay is a rate-limiting proxy for the Riot Games API built in Go.
-          It helps you smooth traffic, share your Riot API token, and expose
-          Swagger UI, metrics, and profiling endpoints from one service.
-        </p>
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
           <Link
