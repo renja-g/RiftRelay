@@ -4,20 +4,7 @@ description: Prometheus-compatible metrics exposed by RiftRelay for queueing, ad
 icon: ChartBar
 ---
 
-RiftRelay exposes Prometheus-compatible metrics at `GET /metrics`. Enable with `ENABLE_METRICS=true` (see [configuration](/docs/reference/configuration)).
-
-## What the metrics give you
-
-Operational visibility into how RiftRelay behaves under load:
-
-- request queue depth
-- queue wait time
-- admission outcomes (allowed, rejected, reason)
-- upstream response behavior (status, region, bucket, priority)
-- upstream request duration
-- standard Go runtime and process metrics
-
-## Prometheus scraping
+Enable with `ENABLE_METRICS=true` (on by default). Scrape `GET /metrics`.
 
 ```yaml
 scrape_configs:
@@ -27,81 +14,105 @@ scrape_configs:
           - localhost:8985
 ```
 
-The Docker Compose stack can start Prometheus and Grafana alongside RiftRelay. Default ports: RiftRelay `8985`, Prometheus `9090`, Grafana `3000`.
+The Docker Compose stack can start Prometheus (`9090`) and Grafana (`3000`) alongside RiftRelay.
 
-## Metric categories
+## Available metrics
 
-### Queue depth
+### `riftrelay_http_requests_total` (counter)
 
-How many requests are waiting in a bucket. Use to identify which Riot API buckets are under pressure and whether traffic spikes cause sustained backlog. If queue depth keeps growing and does not recover, traffic exceeds available capacity.
+Total inbound requests. Labels: `region`, `endpoint`, `priority`.
 
-### Queue wait time
+### `riftrelay_http_inflight` (gauge)
 
-How long requests spend in admission control before being allowed or rejected. One of the most important signals. Increasing wait times often indicate rising load, exhausted rate-limit windows, or sustained bursts on a small set of buckets.
+Requests currently being processed. Labels: `region`, `endpoint`, `priority`.
 
-### Admission outcomes
+### `riftrelay_admission_total` (counter)
 
-Whether requests are allowed or rejected (queue full, timeout, shutdown, etc.). Helps distinguish a healthy queueing system from one that is actively shedding load.
+Admission outcomes. Labels: `outcome`, `region`, `endpoint`, `priority`.
 
-### Upstream request counts
+Outcome values include `allowed`, `rejected_queue_full`, `rejected_timeout`, `shutting_down`, and generic `rejected`.
 
-Responses from Riot, grouped by status code, region, bucket, and priority. Answers: are upstream calls succeeding, are `429`s increasing, are certain buckets failing more than others?
+### `riftrelay_queue_depth` (gauge)
 
-### Upstream duration
+Current queue depth. Labels: `bucket`, `priority`. If this keeps climbing and doesn't recover, traffic is outpacing your rate-limit budget.
 
-How long upstream Riot API requests take after admission. Separates **queue wait time** (before the request is sent) from **upstream duration** (once in flight), making it easier to tell whether latency is from rate-limit pressure or Riot API response time.
+### `riftrelay_queue_wait_seconds` (histogram)
+
+Time requests spend waiting in the admission queue. This is usually the most useful metric for spotting rate-limit pressure — if wait times are climbing, you're hitting capacity.
+
+### `riftrelay_upstream_responses_total` (counter)
+
+Upstream responses from Riot. Labels: `code`, `region`, `endpoint`, `priority`. Watch `code="429"` specifically.
+
+### `riftrelay_upstream_duration_seconds` (histogram)
+
+How long upstream calls take after admission. Separates queue wait (before the call) from upstream latency (during the call), so you can tell whether slowness is from rate limiting or from Riot.
+
+### `riftrelay_request_duration_seconds` (histogram)
+
+End-to-end request duration (queue wait + upstream + overhead). Labels: `region`, `endpoint`, `priority`.
 
 ### Go runtime and process
 
-Standard Prometheus Go and process metrics for service health and capacity observation.
+Standard `go_*` and `process_*` collectors are registered.
 
-## Labels and dimensions
+## Labels
 
-Depending on the metric, labels may include:
+| Label | Values | Used by |
+| --- | --- | --- |
+| `region` | `europe`, `americas`, `asia`, `na1`, `euw1`, etc. | requests, admission, upstream |
+| `endpoint` | normalized Riot API route pattern | requests, admission, upstream |
+| `bucket` | limiter bucket key | queue depth, queue wait |
+| `priority` | `normal`, `high` | all |
+| `outcome` | `allowed`, `rejected_*`, `shutting_down` | admission |
+| `code` | HTTP status code | upstream responses |
 
-- `region`: Riot routing region (e.g. `europe`, `americas`, `asia`, `na1`, `euw1`)
-- `bucket`: normalized limiter bucket (based on Riot API route pattern)
-- `priority`: `normal` or `high`
-- `status`: HTTP status code for upstream metrics
-- `reason`: why a request was allowed or rejected
+## Useful PromQL
 
-## How to interpret
+Upstream 429 rate (are you hitting Riot's limits?):
 
-**Healthy system:** queue depth near zero, low wait time, rare rejections, upstream success dominates, bursts settle quickly.
+```text
+rate(riftrelay_upstream_responses_total{code="429"}[5m])
+```
 
-**Rate-limit pressure:** growing queue depth, increased wait duration, more rejections and `429`s, prolonged recovery after spikes.
+Admission rejection rate:
 
-**Exhausted rate-limit capacity:** queues elevated for long periods, wait times increasing during normal traffic.
+```text
+sum(rate(riftrelay_admission_total{outcome!="allowed"}[5m]))
+```
 
-**Upstream problems (not limiter):** queue wait low but upstream duration or error statuses rise. That points to Riot API latency, outages, or network issues.
+p99 queue wait time:
 
-## Suggested dashboards
+```text
+histogram_quantile(0.99, sum(rate(riftrelay_queue_wait_seconds_bucket[5m])) by (le))
+```
 
-- queue depth by bucket
-- queue wait percentiles
-- admission result counts by reason
-- upstream response counts by status
-- upstream duration percentiles
-- Go runtime health panels
+p99 upstream latency:
 
-## Recommended alerts
+```text
+histogram_quantile(0.99, sum(rate(riftrelay_upstream_duration_seconds_bucket[5m])) by (le))
+```
 
-- sustained queue depth above baseline
-- admission rejection rate above threshold
-- elevated upstream `429` or `5xx` rate
-- unusually high queue wait time
-- missing scrapes from `/metrics`
+Queue depth by bucket (spot hotspots):
 
-## Security
+```text
+topk(10, riftrelay_queue_depth)
+```
 
-Expose `/metrics` only to Prometheus or internal monitoring networks. Avoid public edge exposure.
+## Reading the numbers
+
+**Healthy:** queue depth near zero, low wait times, rare rejections, upstream `200`s dominate, bursts settle quickly.
+
+**Rate-limit pressure:** queue depth growing, wait times climbing, more rejections and `429`s, slow recovery after spikes.
+
+**Upstream problems (not rate limiting):** queue wait is fine but upstream duration or error codes are elevated. That's Riot API latency or an outage, not your limiter.
 
 ## Troubleshooting
 
-**`/metrics` not found.** Ensure `ENABLE_METRICS=true`.
+**`/metrics` returns 404** — `ENABLE_METRICS` is probably `false`.
 
-**Prometheus cannot scrape.** Check RiftRelay is running, host/port is correct, metrics are enabled, firewall allows access.
+**Prometheus can't scrape** — check that RiftRelay is running, port is right, and firewall allows it.
 
-**Grafana shows no data.** Prometheus may not be scraping, data source may be misconfigured, or metrics disabled.
+**Grafana shows no data** — verify the Prometheus data source is configured and scraping successfully.
 
-**Queue metrics high.** Traffic arriving faster than it can be admitted. Investigate bucket hotspots and high-priority overuse.
+**Queue depth stays high** — traffic is arriving faster than it can be admitted. Look at which buckets are hot and whether `X-Priority: high` is overused.

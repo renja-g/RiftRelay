@@ -1,5 +1,5 @@
 import { Link } from "waku";
-import { Mermaid } from "@/components/mermaid";
+import { RequestFlowDiagram } from "@/components/request-flow-diagram";
 
 export default function Home() {
   return (
@@ -14,30 +14,12 @@ export default function Home() {
         </h1>
 
         <p className="mt-6 max-w-2xl text-base text-fd-muted-foreground sm:text-lg">
-          RiftRelay is a rate-limiting proxy for the Riot Games API built in Go.
-          It helps you smooth traffic, share your Riot API token, and expose
-          Swagger UI, metrics, and profiling endpoints from one service.
+          A Go proxy that sits in front of the Riot Games API and handles rate
+          limiting so your app doesn't have to.
         </p>
 
-        <div className="mt-5 w-full max-w-4xl">
-          <Mermaid
-            className="!my-4 [&_svg]:max-h-[min(56vh,440px)] [&_svg]:w-auto [&_svg]:max-w-full"
-            chart={`
-%%{init: {'flowchart': {'nodeSpacing': 40, 'rankSpacing': 44, 'padding': 12}, 'themeVariables': {'fontSize': '15px'}}}%%
-flowchart LR
-    A[Client A] --> RR
-    B[Client B] --> RR
-
-    subgraph RR[RiftRelay]
-        direction TB
-        L[Enforce Riot rate limits]
-        Q[Queue, pace & priority]
-        L --> Q
-    end
-
-    RR --> D[Riot Games API]
-`}
-          />
+        <div className="mt-5 w-full max-w-2xl">
+          <RequestFlowDiagram className="!my-4" />
         </div>
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
@@ -62,8 +44,7 @@ flowchart LR
           >
             <h2 className="text-sm font-semibold">Quickstart</h2>
             <p className="mt-2 text-sm text-fd-muted-foreground">
-              Get RiftRelay running with Docker, Docker Compose, or directly
-              from source.
+              Docker, Docker Compose, or from source.
             </p>
           </Link>
 
@@ -73,8 +54,7 @@ flowchart LR
           >
             <h2 className="text-sm font-semibold">Configuration</h2>
             <p className="mt-2 text-sm text-fd-muted-foreground">
-              Learn which environment variables are required, what the defaults
-              are, and how timeouts and feature flags work.
+              Environment variables, defaults, and feature flags.
             </p>
           </Link>
 
@@ -84,8 +64,7 @@ flowchart LR
           >
             <h2 className="text-sm font-semibold">Usage</h2>
             <p className="mt-2 text-sm text-fd-muted-foreground">
-              Understand the proxy path format, priority requests, and how
-              RiftRelay forwards traffic to Riot.
+              Path format, priority headers, and how requests get forwarded.
             </p>
           </Link>
         </div>

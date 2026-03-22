@@ -4,9 +4,6 @@ description: Get RiftRelay running locally in a few minutes with Docker or from 
 icon: Rocket
 ---
 
-This guide gets RiftRelay running locally so you can start proxying Riot API requests right away.
-
-
 ## Option 1: Docker
 
 The fastest way to get started is the setup script. It downloads the Docker Compose stack, prompts you for your Riot API token, and configures the stack. Start with `docker compose up -d`:
@@ -71,4 +68,4 @@ Example proxied request:
 curl "http://localhost:8985/europe/riot/account/v1/accounts/by-riot-id/Someone/EUW1"
 ```
 
-For request format, headers, priority behavior, and errors, see the [usage guide](/docs/guides/usage).
+See [usage](/docs/guides/usage) for path format, headers, and priority behavior.

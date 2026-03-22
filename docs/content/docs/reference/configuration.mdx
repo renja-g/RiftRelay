@@ -4,247 +4,50 @@ description: Complete reference for configuring RiftRelay with environment varia
 icon: Settings
 ---
 
-RiftRelay is configured through environment variables.
-
-The only required variable is `RIOT_TOKEN`. Everything else has a built-in default.
-
-## Required configuration
-
-### `RIOT_TOKEN`
-
-Your Riot API token.
-
-```bash
-RIOT_TOKEN=your-riot-token
-```
-
-## Full environment variable reference
+RiftRelay is configured entirely through environment variables. The only required one is `RIOT_TOKEN`.
 
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
-| `RIOT_TOKEN` | Yes | none | Riot API token |
-| `PORT` | No | `8985` | HTTP server port |
-| `QUEUE_CAPACITY` | No | `2048` | Maximum queued requests per bucket |
-| `ADMISSION_TIMEOUT` | No | `5m` | Maximum time a request may wait for admission |
-| `ADDITIONAL_WINDOW_SIZE` | No | `150ms` | Extra buffer added to rate-limit windows |
-| `SHUTDOWN_TIMEOUT` | No | `20s` | Graceful shutdown timeout |
-| `UPSTREAM_TIMEOUT` | No | `0` | Upstream request timeout, where `0` means disabled |
-| `ENABLE_METRICS` | No | `true` | Enable the `/metrics` endpoint |
-| `ENABLE_PPROF` | No | `false` | Enable the `/debug/pprof/` endpoints |
-| `ENABLE_SWAGGER` | No | `true` | Enable the `/swagger/` endpoint |
-| `DEFAULT_APP_RATE_LIMIT` | No | `20:1,100:120` | Fallback app rate limit used before Riot returns live headers |
+| `RIOT_TOKEN` | Yes | none | Riot API token (comma-separated for multiple tokens) |
+| `PORT` | No | `8985` | HTTP server port (1–65535) |
+| `QUEUE_CAPACITY` | No | `2048` | Max queued requests per bucket before new ones are rejected with `429` |
+| `ADMISSION_TIMEOUT` | No | `5m` | How long a request can wait in the queue |
+| `ADDITIONAL_WINDOW_SIZE` | No | `150ms` | Safety buffer added to rate-limit windows to avoid edge-of-reset bursts |
+| `SHUTDOWN_TIMEOUT` | No | `20s` | Graceful shutdown deadline |
+| `UPSTREAM_TIMEOUT` | No | `0` | Timeout for Riot API calls (`0` = no timeout) |
+| `ENABLE_METRICS` | No | `true` | Expose `/metrics` |
+| `ENABLE_PPROF` | No | `false` | Expose `/debug/pprof/` |
+| `ENABLE_SWAGGER` | No | `true` | Expose `/swagger/` |
+| `DEFAULT_APP_RATE_LIMIT` | No | `20:1,100:120` | Fallback app rate limit before Riot sends live headers |
 
-## Variable details
+## Duration syntax
 
-### `PORT`
+`ADMISSION_TIMEOUT`, `ADDITIONAL_WINDOW_SIZE`, `SHUTDOWN_TIMEOUT`, and `UPSTREAM_TIMEOUT` use Go duration strings: `150ms`, `2s`, `30s`, `5m`, etc.
 
-The port RiftRelay binds to.
+## `DEFAULT_APP_RATE_LIMIT` format
 
-```bash
-PORT=8985
-```
-
-Rules:
-
-- must be an integer
-- must be at least `1`
-- must be at most `65535`
-
-## `QUEUE_CAPACITY`
-
-The maximum number of queued requests allowed for a bucket before new requests are rejected.
-
-```bash
-QUEUE_CAPACITY=2048
-```
-
-If a bucket queue is full, RiftRelay rejects the request with `429 Too Many Requests` and includes a `Retry-After` header.
-
-## `ADMISSION_TIMEOUT`
-
-How long a request is allowed to wait in admission control before timing out.
-
-```bash
-ADMISSION_TIMEOUT=5m
-```
-
-This value uses Go duration syntax, for example:
-
-- `150ms`
-- `2s`
-- `30s`
-- `5m`
-
-If the timeout is reached before the request is admitted, the request is rejected.
-
-## `ADDITIONAL_WINDOW_SIZE`
-
-An extra safety buffer added to rate-limit windows.
-
-```bash
-ADDITIONAL_WINDOW_SIZE=150ms
-```
-
-This helps avoid sending requests too aggressively right at the edge of a Riot rate-limit reset.
-
-## `SHUTDOWN_TIMEOUT`
-
-How long RiftRelay waits for graceful shutdown.
-
-```bash
-SHUTDOWN_TIMEOUT=20s
-```
-
-When the process receives a shutdown signal, the server stops accepting new work and attempts to shut down cleanly within this timeout.
-
-## `UPSTREAM_TIMEOUT`
-
-Timeout for upstream Riot API requests.
-
-```bash
-UPSTREAM_TIMEOUT=10s
-```
-
-Behavior:
-
-- `0` disables the per-request upstream timeout
-- values greater than `0` wrap upstream requests in a timeout
-
-This uses Go duration syntax.
-
-## `ENABLE_METRICS`
-
-Controls whether the Prometheus metrics endpoint is exposed.
-
-```bash
-ENABLE_METRICS=true
-```
-
-When enabled, RiftRelay exposes:
-
-- `GET /metrics`
-
-## `ENABLE_PPROF`
-
-Controls whether Go profiling endpoints are exposed.
-
-```bash
-ENABLE_PPROF=false
-```
-
-When enabled, RiftRelay exposes endpoints under:
-
-- `GET /debug/pprof/`
-
-That includes standard handlers like profile, trace, symbol, and cmdline.
-
-## `ENABLE_SWAGGER`
-
-Controls whether the built-in Swagger UI is exposed.
-
-```bash
-ENABLE_SWAGGER=true
-```
-
-When enabled, RiftRelay exposes:
-
-- `GET /swagger/`
-
-The Swagger handler fetches the Riot OpenAPI schema, rewrites the server URL to point at your RiftRelay instance, removes upstream security configuration, and adds the `X-Priority` header parameter to operations.
-
-## `DEFAULT_APP_RATE_LIMIT`
-
-Fallback app limits used before the first upstream response provides live Riot rate-limit headers.
-
-```bash
-DEFAULT_APP_RATE_LIMIT=20:1,100:120
-```
-
-Format:
-
-```text
-limit:window,limit:window
-```
-
-Example:
+Comma-separated `limit:window` pairs. Both values are positive integers — limit is the request count, window is the duration in seconds.
 
 ```text
 20:1,100:120
 ```
 
-That means:
+That means 20 requests per 1 second and 100 requests per 120 seconds. This is only used before the first upstream response provides real Riot headers.
 
-- `20` requests per `1` second
-- `100` requests per `120` seconds
+## `ENABLE_SWAGGER` details
 
-Rules:
+The Swagger handler fetches the Riot OpenAPI schema, rewrites the server URL to point at your RiftRelay instance, strips upstream auth config, and adds `X-Priority` as a parameter. Handy for local testing; disable it in hardened environments if you don't need it.
 
-- each entry must contain `limit:window`
-- both values must be positive integers
-- entries are comma-separated
+## Validation
 
-## Example configurations
-
-### Minimal configuration
-
-```bash
-RIOT_TOKEN=your-riot-token
-```
-
-### Local development
-
-```bash
-RIOT_TOKEN=your-riot-token
-PORT=8985
-ENABLE_METRICS=true
-ENABLE_SWAGGER=true
-ENABLE_PPROF=false
-UPSTREAM_TIMEOUT=10s
-```
-
-### Debugging-focused setup
-
-```bash
-RIOT_TOKEN=your-riot-token
-ENABLE_METRICS=true
-ENABLE_PPROF=true
-ENABLE_SWAGGER=true
-UPSTREAM_TIMEOUT=15s
-```
-
-## Validation rules
-
-RiftRelay validates configuration during startup.
-
-Startup fails when:
+RiftRelay validates everything at startup and fails fast if:
 
 - `RIOT_TOKEN` is missing
-- an integer variable is not a valid integer
-- a boolean variable is not a valid boolean
-- a duration variable is not a valid Go duration
-- `PORT` is greater than `65535`
-- numeric minimum constraints are violated
+- an integer isn't a valid integer, or a boolean isn't a valid boolean
+- a duration can't be parsed
+- `PORT` is out of range
 - `DEFAULT_APP_RATE_LIMIT` is malformed
 
-## Notes on internal HTTP server timeouts
+## Internal HTTP server timeouts
 
-Some HTTP server timeouts are intentionally internal and are not currently user-configurable:
-
-- read header timeout
-- read timeout
-- write timeout
-- idle timeout
-
-The write timeout is derived from:
-
-- `ADMISSION_TIMEOUT`
-- `UPSTREAM_TIMEOUT`
-- an additional safety buffer
-
-If `UPSTREAM_TIMEOUT` is `0`, RiftRelay still calculates write timeout using a default upstream budget internally.
-
-## Related pages
-
-- [quickstart](/docs/quickstart): run locally
-- [usage](/docs/guides/usage): request format and behavior
-- [endpoints](/docs/reference/endpoints): built-in routes
+Some server timeouts (read header, read, write, idle) are intentionally not user-configurable. The write timeout is derived from `ADMISSION_TIMEOUT` + `UPSTREAM_TIMEOUT` + a safety buffer. When `UPSTREAM_TIMEOUT` is `0`, a default upstream budget is used internally for the calculation.
