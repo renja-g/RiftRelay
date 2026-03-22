@@ -39,6 +39,14 @@ type options struct {
 
 type Option func(*options)
 
+func WithBaseTransport(rt http.RoundTripper) Option {
+	return func(o *options) {
+		if rt != nil {
+			o.baseTransport = rt
+		}
+	}
+}
+
 func WithLimiter(l *limiter.Limiter) Option {
 	return func(o *options) {
 		o.limiter = l
