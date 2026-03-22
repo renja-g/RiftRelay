@@ -1,0 +1,13 @@
+%%{init: {'flowchart': {'nodeSpacing': 40, 'rankSpacing': 44, 'padding': 12}, 'themeVariables': {'fontSize': '15px'}}}%%
+flowchart LR
+    A[Client A] --> RR
+    B[Client B] --> RR
+
+    subgraph RR[RiftRelay]
+        direction TB
+        L[Enforce Riot rate limits]
+        Q[Queue, pace & priority]
+        L --> Q
+    end
+
+    RR --> D[Riot Games API]

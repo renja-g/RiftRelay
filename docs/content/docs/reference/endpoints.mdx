@@ -6,77 +6,58 @@ icon: Waypoints
 
 ## Built-in routes
 
-- `GET /healthz`: always available
-- `GET /metrics`: when `ENABLE_METRICS=true`. See [metrics](/docs/reference/metrics)
-- `GET /debug/pprof/`: when `ENABLE_PPROF=true`. See [profiling](/docs/reference/profiling)
-- `GET /swagger/`: when `ENABLE_SWAGGER=true`
-- `/{region}/{riot-api-path}`: proxied Riot API traffic
+- `GET /healthz` — always available
+- `GET /metrics` — when `ENABLE_METRICS=true` ([metrics reference](/docs/reference/metrics))
+- `GET /debug/pprof/` — when `ENABLE_PPROF=true` ([profiling reference](/docs/reference/profiling))
+- `GET /swagger/` — when `ENABLE_SWAGGER=true`
+- `/{region}/{riot-api-path}` — proxied Riot API traffic
 
-## Health check
+## `GET /healthz`
 
-### `GET /healthz`
-
-Returns `204 No Content`. Use for container checks, uptime probes, and load balancers.
+Returns `204 No Content`. Use it for container health checks and load balancer probes.
 
 ```sh
 curl -i http://localhost:8985/healthz
 ```
 
-## Metrics
+## `GET /metrics`
 
-### `GET /metrics`
+Prometheus-compatible metrics for queueing, admission, and upstream visibility. See [metrics](/docs/reference/metrics).
 
-Prometheus-compatible metrics for queueing, admission, and upstream request visibility. See the [metrics reference](/docs/reference/metrics) for details.
+## `GET /debug/pprof/`
 
-## Profiling
+Standard Go pprof index plus `profile`, `trace`, `cmdline`, and `symbol`. See [profiling](/docs/reference/profiling).
 
-### `GET /debug/pprof/`
+## `GET /swagger/`
 
-Go profiling index and related routes (`cmdline`, `profile`, `symbol`, `trace`). See the [profiling reference](/docs/reference/profiling) for usage.
+RiftRelay fetches the Riot OpenAPI spec, rewrites the server URL to point at your instance, strips upstream auth, and adds `X-Priority` as a parameter. Useful for poking at the API through your proxy without writing curl commands.
 
-## Swagger UI
+## `/{region}/{riot-api-path}`
 
-### `GET /swagger/`
-
-Built-in Swagger UI. RiftRelay fetches the Riot OpenAPI spec, rewrites the server URL to point at your instance, removes upstream security requirements, and adds the `X-Priority` header parameter. Useful for testing requests against your local proxy.
-
-## Proxied Riot API requests
-
-### `/{region}/{riot-api-path}`
-
-All Riot API traffic uses this path shape. The first segment is the region; the rest is forwarded as the Riot API path. Invalid paths return `400`.
-
-Example:
+All Riot API traffic goes through this. The first segment is the region; everything after is forwarded verbatim. Bad paths get a `400`.
 
 ```sh
 curl "http://localhost:8985/europe/riot/account/v1/accounts/by-riot-id/Someone/EUW1"
+# -> https://europe.api.riotgames.com/riot/account/v1/accounts/by-riot-id/Someone/EUW1
 ```
 
-Forwarded to: `https://europe.api.riotgames.com/riot/account/v1/accounts/by-riot-id/Someone/EUW1`
+RiftRelay injects the token. Don't send `X-Riot-Token` from your client.
 
-RiftRelay injects the Riot token. Your client does not send `X-Riot-Token`. For `X-Priority: high`, see [priority requests](/docs/guides/priority-requests).
-
-### Request routing
-
-RiftRelay matches the upstream path to a known Riot API route pattern and uses it as the method-level bucket key for rate limiting. Paths like `/lol/match/v5/matches/EUW1_1234567890` are grouped under a normalized pattern such as `/lol/match/v5/matches/{matchId}`.
+Paths are matched to known Riot API route patterns for bucketing — `/lol/match/v5/matches/EUW1_1234567890` gets grouped under `/lol/match/v5/matches/{matchId}`.
 
 ## Error behavior
 
 | Route type | Status | Meaning |
 | --- | --- | --- |
-| Health | `204` | Service is healthy |
-| Invalid proxy path | `400` | Request path is malformed (missing region, missing path, or malformed region) |
-| Admission rejection | `429` | Request rejected, queue exhausted, or admission timeout; includes `Retry-After` when applicable |
-| Upstream timeout | `408` | Upstream request exceeded timeout budget |
-| Client disconnect | `499` | Client disconnected before upstream completed |
-| Upstream unavailable | `502` | Upstream unreachable or returned unrecoverable failure |
+| Health | `204` | Healthy |
+| Invalid proxy path | `400` | Malformed path (missing region, missing path, bad region) |
+| Admission rejection | `429` | Queue full or admission timeout; `Retry-After` included when applicable |
+| Upstream timeout | `408` | Upstream call exceeded timeout budget |
+| Client disconnect | `499` | Client hung up before upstream responded |
+| Upstream unavailable | `502` | Upstream unreachable or unrecoverable failure |
 
-RiftRelay retries upstream `429` responses when Riot includes a valid `Retry-After` header; this is transport-level behavior separate from the main admission controller.
+RiftRelay retries upstream `429`s when Riot includes a valid `Retry-After` header. This is transport-level behavior, separate from the admission controller.
 
-## Recommended exposure
+## Exposure recommendations
 
-- Expose proxy traffic
-- Expose `/healthz` to your orchestrator or load balancer
-- Expose `/metrics` only to your monitoring system
-- Keep `/debug/pprof/` private
-- Enable `/swagger/` for local or internal use; disable in hardened environments if not needed
+Expose the proxy and `/healthz` to your orchestrator. Keep `/metrics` internal to your monitoring stack. Keep `/debug/pprof/` private. `/swagger/` is fine for local or internal use.

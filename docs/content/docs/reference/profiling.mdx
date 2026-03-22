@@ -4,42 +4,17 @@ description: Reference for RiftRelay's optional Go pprof endpoints.
 icon: Activity
 ---
 
-RiftRelay can expose Go's built-in profiling endpoints through `net/http/pprof`. They are disabled by default and should only be enabled when you need performance diagnostics.
+Set `ENABLE_PPROF=true` to mount Go's standard pprof handlers under `/debug/pprof/`. Disabled by default — only turn it on when you need performance diagnostics.
 
-## Enable profiling
+## Endpoints
 
-Set `ENABLE_PPROF=true`. RiftRelay then mounts the standard pprof handlers under `/debug/pprof/`.
+- `GET /debug/pprof/` — index
+- `GET /debug/pprof/profile` — CPU profile
+- `GET /debug/pprof/trace` — execution trace
+- `GET /debug/pprof/cmdline`, `GET /debug/pprof/symbol` — tooling support
 
-```bash
-RIOT_TOKEN=your-riot-token
-ENABLE_PPROF=true
-```
-
-## Available endpoints
-
-When enabled, RiftRelay exposes:
-
-- `GET /debug/pprof/`: index
-- `GET /debug/pprof/profile`: CPU profile
-- `GET /debug/pprof/trace`: execution trace
-- `GET /debug/pprof/cmdline`, `GET /debug/pprof/symbol`: tooling support
-
-These routes are not registered when `ENABLE_PPROF=false`.
+None of these are registered when `ENABLE_PPROF=false`.
 
 ## Usage
 
-Use `go tool pprof` and `go tool trace` against RiftRelay's base URL (e.g. `http://localhost:8985`). For full usage details, see the [Go pprof package documentation](https://pkg.go.dev/runtime/pprof).
-
-Example debug configuration:
-
-```bash
-RIOT_TOKEN=your-riot-token
-ENABLE_PPROF=true
-ENABLE_METRICS=true
-ENABLE_SWAGGER=true
-```
-
-## Related pages
-
-- [metrics](/docs/reference/metrics): operational visibility
-- [configuration](/docs/reference/configuration): `ENABLE_PPROF` and related settings
+Point `go tool pprof` or `go tool trace` at `http://localhost:8985`. See the [Go pprof docs](https://pkg.go.dev/runtime/pprof) for the full reference.

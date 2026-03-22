@@ -4,55 +4,42 @@ description: Learn how to send requests through RiftRelay and how request routin
 icon: Waypoints
 ---
 
-This guide explains how to use RiftRelay once it is running.
-
 ## Request format
 
-Every proxied request must use this path shape:
+Every proxied request uses this path shape:
 
 ```txt
 /{region}/{riot-api-path}
 ```
 
-RiftRelay reads the first path segment as the Riot routing region or platform host prefix and forwards the rest of the path to the Riot API.
-
-Example:
+The first segment is the Riot routing region or platform prefix. Everything after it is forwarded as-is.
 
 ```sh
 curl "http://localhost:8985/europe/riot/account/v1/accounts/by-riot-id/Someone/EUW1"
 ```
 
-Forwarded to: `https://europe.api.riotgames.com/riot/account/v1/accounts/by-riot-id/Someone/EUW1`
-
-Other endpoints (match, summoner, etc.) follow the same pattern. See [Endpoints](/docs/reference/endpoints) for the full reference.
+That becomes `https://europe.api.riotgames.com/riot/account/v1/accounts/by-riot-id/Someone/EUW1`. Match, summoner, and every other Riot endpoint follow the same pattern.
 
 ## Request headers
 
-RiftRelay injects the Riot API token from the configured `RIOT_TOKEN`. Do not send your token from the client.
+RiftRelay injects `RIOT_TOKEN` automatically. Don't send your token from the client.
 
 ### `X-Priority`
 
-Send `X-Priority: high` for latency-sensitive requests. It bypasses pacing delay but still respects rate limits. See [priority requests](/docs/guides/priority-requests).
+Send `X-Priority: high` for latency-sensitive requests. It skips pacing delay but still respects rate limits. See [priority requests](/docs/guides/priority-requests).
 
 ### `X-Riot-Token-Index`
 
-If you have multiple API tokens configured (e.g., `RIOT_TOKEN=a,b,c`), you can force RiftRelay to use a specific token for a request by passing its 0-based index. For example, `X-Riot-Token-Index: 0` will use the first token in the configuration list. If the index is omitted, RiftRelay will intelligently select the best available token as usual. If the index is invalid or out of bounds, RiftRelay returns `400 Bad Request`.
+If you have multiple tokens configured (`RIOT_TOKEN=a,b,c`), you can pin a request to a specific token by passing its 0-based index. Omit the header and RiftRelay picks the best available token. Out-of-bounds values return `400`.
 
 ## Timeouts
 
-Requests may wait in the admission queue before forwarding. See [Configuration](/docs/reference/configuration) for `ADMISSION_TIMEOUT` and `UPSTREAM_TIMEOUT`.
+Requests can sit in the admission queue before being forwarded. `ADMISSION_TIMEOUT` controls how long that's allowed to take, and `UPSTREAM_TIMEOUT` caps the Riot API call itself. See [configuration](/docs/reference/configuration).
 
 ## Errors
 
-RiftRelay returns standard HTTP status codes for invalid paths (`400`), admission rejection (`429`), upstream timeouts (`408`), and upstream failures (`502`). See [Endpoints](/docs/reference/endpoints#error-behavior) for the full error reference.
+Standard HTTP codes: `400` for bad paths, `429` when the queue is full or admission times out, `408` for upstream timeouts, `502` for upstream failures. Full table in [endpoints](/docs/reference/endpoints#error-behavior).
 
-## Best practices
+## Tips
 
-- Keep your Riot token only on the RiftRelay server
-- Send all Riot traffic through RiftRelay instead of mixing direct and proxied requests
-- Use normal priority by default; reserve `X-Priority: high` for latency-sensitive traffic
-
-## Next steps
-
-- [Configuration](/docs/reference/configuration): environment variables
-- [Endpoints](/docs/reference/endpoints): built-in routes and error reference
+Keep `RIOT_TOKEN` on the server only. Route all Riot traffic through RiftRelay — mixing direct and proxied calls defeats the purpose of centralized rate limiting. Default to normal priority; `X-Priority: high` loses its value if everything is high.

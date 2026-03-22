@@ -4,55 +4,31 @@ description: A rate-limiting proxy for the Riot Games API built in Go with integ
 icon: Shield
 ---
 
-RiftRelay sits between your application and the Riot Games API and handles rate limiting for you.
+You send requests to RiftRelay instead of directly to the Riot Games API. It validates the route, maps it to the right rate-limit bucket, queues it if needed, and forwards it when a slot opens up. Your app never sees a `429`.
 
-Instead of firing requests as fast as possible and dealing with `429 Too Many Requests` yourself, you send requests to RiftRelay. It validates the route, maps the request to the correct Riot API bucket, queues it when needed, and forwards it upstream when a token is allowed to send it.
+## What it does
 
-## What RiftRelay does
-
-- Proxies requests to the Riot Games API through `/{region}/{riot-api-path}`. See [usage](/docs/guides/usage) for the full format
+- Proxies requests through `/{region}/{riot-api-path}` — see [usage](/docs/guides/usage)
 - Tracks app and method rate limits from Riot response headers
-- Spreads requests evenly across the remaining window instead of bursting at the reset boundary, ensuring you still use 100% of your allowed requests.
-- Lets you mark urgent traffic with `X-Priority: high`. See [priority requests](/docs/guides/priority-requests)
-- Exposes `GET /healthz`, optional `GET /metrics`, `GET /debug/pprof/`, and `GET /swagger/`. See [endpoints](/docs/reference/endpoints)
-
-## Why use it
-
-If you are building against the Riot API, you usually need to solve a few recurring problems:
-
-- pacing requests across multiple rate-limit windows
-- avoiding accidental bursts
-- handling retries and backpressure
-- sharing an API key across different workloads
-- exposing visibility into queueing and upstream behavior
-
-RiftRelay centralizes that logic in one service so your app can focus on game data instead of transport and throttling details.
+- Spreads requests evenly across the remaining window instead of bursting at the reset boundary (you still use 100% of your quota)
+- Supports `X-Priority: high` for latency-sensitive traffic — see [priority requests](/docs/guides/priority-requests)
+- Exposes `/healthz`, optional `/metrics`, `/debug/pprof/`, and `/swagger/` — see [endpoints](/docs/reference/endpoints)
 
 ## How requests flow
 
 1. Your app sends a request to RiftRelay.
 2. The path is parsed as `/{region}/{riot-api-path}`.
-3. RiftRelay matches the upstream path to a Riot API pattern and derives a bucket key.
-4. The admission controller decides when the request may run.
+3. The upstream path is matched to a Riot API pattern to derive a bucket key.
+4. The admission controller decides when the request may go through.
 5. The request is forwarded to `{region}.api.riotgames.com`.
-6. Riot response headers are observed and used to update limiter state.
+6. Rate-limit state is updated from the Riot response headers.
 
 ## Configuration
 
-Configure RiftRelay via environment variables. The only required one is `RIOT_TOKEN`. See the [configuration reference](/docs/reference/configuration) for the full list.
-
-## Good fit for RiftRelay
-
-RiftRelay is a good fit when you want to:
-
-- run one shared Riot API gateway for multiple services
-- smooth request bursts instead of handling them in each client
-- share one Riot API token across services
-- monitor queue wait time and upstream behavior
-- use Swagger UI locally against the Riot API through your proxy
+Only `RIOT_TOKEN` is required. Everything else has defaults. See the [configuration reference](/docs/reference/configuration).
 
 ## Next steps
 
-- [Quickstart](/docs/quickstart): run RiftRelay locally
-- [Configuration](/docs/reference/configuration): before deploying to production
-- [Usage](/docs/guides/usage): request format and behavior
+- [Quickstart](/docs/quickstart) — run RiftRelay locally
+- [Configuration](/docs/reference/configuration) — env vars and defaults
+- [Usage](/docs/guides/usage) — request format and behavior
