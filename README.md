@@ -104,7 +104,7 @@ go test ./...
 With race detection:
 
 ```bash
-go test -race ./internal/config ./internal/router ./internal/limiter ./internal/proxy
+go test -race ./...
 ```
 
 Benchmarks:

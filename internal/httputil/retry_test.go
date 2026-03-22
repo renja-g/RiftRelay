@@ -6,67 +6,33 @@ import (
 )
 
 func TestParseRetryAfter(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		value    string
-		wantWait time.Duration
-		wantOK   bool
+		want     time.Duration
+		wantOkay bool
 	}{
-		{
-			name:     "delta seconds",
-			value:    "2",
-			wantWait: 2 * time.Second,
-			wantOK:   true,
-		},
-		{
-			name:     "zero seconds",
-			value:    "0",
-			wantWait: 0,
-			wantOK:   true,
-		},
-		{
-			name:     "delta seconds three",
-			value:    "3",
-			wantWait: 3 * time.Second,
-			wantOK:   true,
-		},
-		{
-			name:   "invalid value",
-			value:  "invalid",
-			wantOK: false,
-		},
-		{
-			name:   "invalid header",
-			value:  "later",
-			wantOK: false,
-		},
-		{
-			name:   "empty header",
-			value:  "",
-			wantOK: false,
-		},
-		{
-			name:   "negative seconds are invalid",
-			value:  "-1",
-			wantOK: false,
-		},
-		{
-			name:     "whitespace trimmed",
-			value:    "  5  ",
-			wantWait: 5 * time.Second,
-			wantOK:   true,
-		},
+		{name: "seconds", value: "3", want: 3 * time.Second, wantOkay: true},
+		{name: "zero", value: "0", want: 0, wantOkay: true},
+		{name: "trimmed", value: " 12 ", want: 12 * time.Second, wantOkay: true},
+		{name: "empty", value: "", wantOkay: false},
+		{name: "negative", value: "-1", wantOkay: false},
+		{name: "nonnumeric", value: "later", wantOkay: false},
 	}
 
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			gotWait, gotOK := ParseRetryAfter(tt.value)
-			if gotOK != tt.wantOK {
-				t.Fatalf("expected ok=%v, got %v", tt.wantOK, gotOK)
+			t.Parallel()
+
+			got, ok := ParseRetryAfter(tt.value)
+			if ok != tt.wantOkay {
+				t.Fatalf("ParseRetryAfter() ok = %v, want %v", ok, tt.wantOkay)
 			}
-			if gotWait != tt.wantWait {
-				t.Fatalf("expected wait=%s, got %s", tt.wantWait, gotWait)
+			if got != tt.want {
+				t.Fatalf("ParseRetryAfter() duration = %v, want %v", got, tt.want)
 			}
 		})
 	}

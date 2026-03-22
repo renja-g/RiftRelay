@@ -1,7 +1,6 @@
 package config
 
 import (
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -9,152 +8,130 @@ import (
 
 func TestLoad(t *testing.T) {
 	tests := []struct {
-		name       string
-		env        map[string]string
-		wantErr    string
-		assertions func(t *testing.T, cfg Config)
+		name      string
+		env       map[string]string
+		wantErr   []string
+		assertCfg func(t *testing.T, cfg Config)
 	}{
 		{
-			name: "loads defaults with required token",
+			name: "defaults with required token",
 			env: map[string]string{
-				"RIOT_TOKEN": "token-a",
+				"RIOT_TOKEN": "token-a, token-b",
 			},
-			assertions: func(t *testing.T, cfg Config) {
+			assertCfg: func(t *testing.T, cfg Config) {
 				t.Helper()
-				if cfg.Port != defaultPort {
-					t.Fatalf("expected default port %d, got %d", defaultPort, cfg.Port)
+				if got, want := cfg.Tokens, []string{"token-a", "token-b"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+					t.Fatalf("Tokens = %v, want %v", got, want)
 				}
-				if len(cfg.Tokens) != 1 || cfg.Tokens[0] != "token-a" {
-					t.Fatalf("unexpected token parsing: %+v", cfg.Tokens)
+				if got, want := cfg.Port, defaultPort; got != want {
+					t.Fatalf("Port = %d, want %d", got, want)
+				}
+				if got, want := cfg.Server.WriteTimeout, defaultAdmissionTimeout+5*time.Minute+30*time.Second; got != want {
+					t.Fatalf("Server.WriteTimeout = %v, want %v", got, want)
 				}
 			},
 		},
 		{
-			name: "parses typed overrides",
+			name: "custom values",
 			env: map[string]string{
-				"RIOT_TOKEN":             "a,b",
-				"PORT":                   "9101",
-				"QUEUE_CAPACITY":         "1234",
+				"RIOT_TOKEN":             "token-a",
+				"PORT":                   "9001",
+				"QUEUE_CAPACITY":         "42",
 				"ADMISSION_TIMEOUT":      "3s",
-				"ADDITIONAL_WINDOW_SIZE": "250ms",
+				"ADDITIONAL_WINDOW_SIZE": "25ms",
+				"SHUTDOWN_TIMEOUT":       "4s",
+				"UPSTREAM_TIMEOUT":       "7s",
 				"ENABLE_METRICS":         "false",
 				"ENABLE_PPROF":           "true",
-				"ENABLE_SWAGGER":         "true",
-				"UPSTREAM_TIMEOUT":       "2s",
+				"ENABLE_SWAGGER":         "false",
+				"DEFAULT_APP_RATE_LIMIT": "10:1,40:120",
 			},
-			assertions: func(t *testing.T, cfg Config) {
+			assertCfg: func(t *testing.T, cfg Config) {
 				t.Helper()
-				if cfg.Port != 9101 {
-					t.Fatalf("expected port 9101, got %d", cfg.Port)
+				if got, want := cfg.Port, 9001; got != want {
+					t.Fatalf("Port = %d, want %d", got, want)
 				}
-				if cfg.QueueCapacity != 1234 {
-					t.Fatalf("expected queue 1234, got %d", cfg.QueueCapacity)
+				if got, want := cfg.QueueCapacity, 42; got != want {
+					t.Fatalf("QueueCapacity = %d, want %d", got, want)
 				}
-				if cfg.AdmissionTimeout != 3*time.Second {
-					t.Fatalf("unexpected admission timeout: %s", cfg.AdmissionTimeout)
-				}
-				if cfg.AdditionalWindow != 250*time.Millisecond {
-					t.Fatalf("unexpected additional window: %s", cfg.AdditionalWindow)
+				if got, want := cfg.UpstreamTimeout, 7*time.Second; got != want {
+					t.Fatalf("UpstreamTimeout = %v, want %v", got, want)
 				}
 				if cfg.MetricsEnabled {
-					t.Fatalf("expected metrics disabled")
+					t.Fatal("MetricsEnabled = true, want false")
 				}
 				if !cfg.PprofEnabled {
-					t.Fatalf("expected pprof enabled")
+					t.Fatal("PprofEnabled = false, want true")
 				}
-				if !cfg.SwaggerEnabled {
-					t.Fatalf("expected swagger enabled")
+				if cfg.SwaggerEnabled {
+					t.Fatal("SwaggerEnabled = true, want false")
 				}
-				if cfg.UpstreamTimeout != 2*time.Second {
-					t.Fatalf("expected upstream timeout 2s, got %s", cfg.UpstreamTimeout)
+				if got, want := cfg.Server.WriteTimeout, 3*time.Second+7*time.Second+30*time.Second; got != want {
+					t.Fatalf("Server.WriteTimeout = %v, want %v", got, want)
 				}
 			},
 		},
 		{
-			name:    "fails without token",
-			env:     map[string]string{},
-			wantErr: "RIOT_TOKEN env var is required",
-		},
-		{
-			name: "fails on invalid integer and bool",
+			name: "aggregates validation errors",
 			env: map[string]string{
-				"RIOT_TOKEN":     "token-a",
-				"PORT":           "oops",
-				"ENABLE_METRICS": "maybe",
+				"PORT":                   "70000",
+				"QUEUE_CAPACITY":         "0",
+				"ADMISSION_TIMEOUT":      "nope",
+				"ENABLE_METRICS":         "sometimes",
+				"DEFAULT_APP_RATE_LIMIT": "bad",
 			},
-			wantErr: "PORT must be an integer",
+			wantErr: []string{
+				"RIOT_TOKEN env var is required",
+				"PORT must be <= 65535",
+				"QUEUE_CAPACITY must be >= 1",
+				"ADMISSION_TIMEOUT must be a valid duration",
+				"ENABLE_METRICS must be a boolean",
+				"DEFAULT_APP_RATE_LIMIT must be in format",
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			unset := applyEnv(t, tt.env)
-			defer unset()
+			for _, key := range []string{
+				"RIOT_TOKEN",
+				"PORT",
+				"QUEUE_CAPACITY",
+				"ADMISSION_TIMEOUT",
+				"ADDITIONAL_WINDOW_SIZE",
+				"SHUTDOWN_TIMEOUT",
+				"UPSTREAM_TIMEOUT",
+				"ENABLE_METRICS",
+				"ENABLE_PPROF",
+				"ENABLE_SWAGGER",
+				"DEFAULT_APP_RATE_LIMIT",
+			} {
+				t.Setenv(key, "")
+			}
+			for key, value := range tt.env {
+				t.Setenv(key, value)
+			}
 
 			cfg, err := Load()
-			if tt.wantErr != "" {
+			if len(tt.wantErr) > 0 {
 				if err == nil {
-					t.Fatalf("expected error containing %q, got nil", tt.wantErr)
+					t.Fatal("Load() error = nil, want non-nil")
 				}
-				if !strings.Contains(err.Error(), tt.wantErr) {
-					t.Fatalf("expected error containing %q, got %v", tt.wantErr, err)
+				for _, fragment := range tt.wantErr {
+					if !strings.Contains(err.Error(), fragment) {
+						t.Fatalf("Load() error = %q, want substring %q", err.Error(), fragment)
+					}
 				}
 				return
 			}
+
 			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
+				t.Fatalf("Load() error = %v", err)
 			}
-			if tt.assertions != nil {
-				tt.assertions(t, cfg)
+			if tt.assertCfg != nil {
+				tt.assertCfg(t, cfg)
 			}
 		})
-	}
-}
-
-func applyEnv(t *testing.T, values map[string]string) func() {
-	t.Helper()
-
-	keys := []string{
-		"RIOT_TOKEN",
-		"PORT",
-		"QUEUE_CAPACITY",
-		"ADMISSION_TIMEOUT",
-		"ADDITIONAL_WINDOW_SIZE",
-		"SHUTDOWN_TIMEOUT",
-		"UPSTREAM_TIMEOUT",
-		"ENABLE_METRICS",
-		"ENABLE_PPROF",
-		"ENABLE_SWAGGER",
-		"DEFAULT_APP_RATE_LIMIT",
-	}
-
-	original := make(map[string]string, len(keys))
-	present := make(map[string]bool, len(keys))
-	for _, key := range keys {
-		value, ok := os.LookupEnv(key)
-		if ok {
-			original[key] = value
-			present[key] = true
-		}
-		if err := os.Unsetenv(key); err != nil {
-			t.Fatalf("unset %s: %v", key, err)
-		}
-	}
-
-	for key, value := range values {
-		if err := os.Setenv(key, value); err != nil {
-			t.Fatalf("set %s: %v", key, err)
-		}
-	}
-
-	return func() {
-		for _, key := range keys {
-			if present[key] {
-				_ = os.Setenv(key, original[key])
-				continue
-			}
-			_ = os.Unsetenv(key)
-		}
 	}
 }

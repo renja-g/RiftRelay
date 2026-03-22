@@ -15,13 +15,37 @@ import (
 	"github.com/renja-g/RiftRelay/internal/swagger"
 )
 
+type options struct {
+	proxyOptions   []proxy.Option
+	swaggerHandler http.Handler
+}
+
+type Option func(*options)
+
+func WithProxyOptions(opts ...proxy.Option) Option {
+	return func(o *options) {
+		o.proxyOptions = append(o.proxyOptions, opts...)
+	}
+}
+
+func WithSwaggerHandler(handler http.Handler) Option {
+	return func(o *options) {
+		o.swaggerHandler = handler
+	}
+}
+
 type Server struct {
 	cfg     config.Config
 	server  *http.Server
 	limiter *limiter.Limiter
 }
 
-func New(cfg config.Config) (*Server, error) {
+func New(cfg config.Config, opts ...Option) (*Server, error) {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
+
 	var collector *metrics.Collector
 	if cfg.MetricsEnabled {
 		collector = metrics.NewCollector()
@@ -48,6 +72,7 @@ func New(cfg config.Config) (*Server, error) {
 	if collector != nil {
 		proxyOptions = append(proxyOptions, proxy.WithMetrics(collector))
 	}
+	proxyOptions = append(proxyOptions, o.proxyOptions...)
 
 	handler := proxy.New(cfg, proxyOptions...)
 
@@ -67,7 +92,11 @@ func New(cfg config.Config) (*Server, error) {
 		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 	}
 	if cfg.SwaggerEnabled {
-		mux.Handle("/swagger/", swagger.NewHandler())
+		swaggerHandler := o.swaggerHandler
+		if swaggerHandler == nil {
+			swaggerHandler = swagger.NewHandler()
+		}
+		mux.Handle("/swagger/", swaggerHandler)
 	}
 
 	srv := &http.Server{
@@ -84,6 +113,10 @@ func New(cfg config.Config) (*Server, error) {
 		server:  srv,
 		limiter: l,
 	}, nil
+}
+
+func (s *Server) Handler() http.Handler {
+	return s.server.Handler
 }
 
 func (s *Server) Start(ctx context.Context) error {

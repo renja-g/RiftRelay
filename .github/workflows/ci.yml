@@ -27,7 +27,7 @@ jobs:
         run: go test -v ./...
 
       - name: Run tests with race detection
-        run: go test -race -v ./internal/config ./internal/router ./internal/limiter ./internal/proxy
+        run: go test -race -v ./...
 
   lint:
     name: Lint

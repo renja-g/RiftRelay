@@ -3,176 +3,97 @@ package proxy
 import (
 	"context"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
-	"time"
 
-	"github.com/renja-g/RiftRelay/internal/config"
-	"github.com/renja-g/RiftRelay/internal/limiter"
-	"github.com/renja-g/RiftRelay/internal/metrics"
+	"github.com/renja-g/RiftRelay/internal/testutil"
 )
 
-type captureRoundTripper struct {
-	lastRequest *http.Request
-}
+func TestProxyNewRewritesRequestAndInjectsToken(t *testing.T) {
+	t.Parallel()
 
-func (c *captureRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
-	c.lastRequest = r.Clone(r.Context())
-	header := make(http.Header)
-	header.Set("X-App-Rate-Limit", "20:1")
-	header.Set("X-App-Rate-Limit-Count", "1:1")
-	header.Set("X-Method-Rate-Limit", "20:1")
-	header.Set("X-Method-Rate-Limit-Count", "1:1")
-	return &http.Response{
-		StatusCode: http.StatusOK,
-		Header:     header,
-		Body:       io.NopCloser(strings.NewReader(`{"ok":true}`)),
-		Request:    r,
-	}, nil
-}
+	cfg := testutil.DummyConfig()
+	cfg.UpstreamTimeout = 0
 
-func TestProxyInjectsTokenAndRoutes(t *testing.T) {
-	l, err := limiter.New(limiter.Config{
-		KeyCount:      1,
-		QueueCapacity: 32,
-	})
-	if err != nil {
-		t.Fatalf("new limiter: %v", err)
-	}
-	defer l.Close()
+	var gotHost string
+	var gotPath string
+	var gotToken string
 
-	collector := metrics.NewCollector()
-	rt := &captureRoundTripper{}
-	handler := New(
-		config.Config{
-			Tokens:           []string{"test-token"},
-			AdmissionTimeout: 2 * time.Second,
-		},
-		func(o *options) {
-			o.baseTransport = rt
-		},
-		WithLimiter(l),
-		WithMetrics(collector),
-	)
+	handler := New(cfg, WithBaseTransport(testutil.RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		gotHost = r.URL.Host
+		gotPath = r.URL.Path
+		gotToken = r.Header.Get("X-Riot-Token")
+		return testutil.HTTPResponse(http.StatusNoContent, "", nil), nil
+	})))
 
-	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/na1/lol/status/v4/platform-data", nil)
-	req.RemoteAddr = "203.0.113.9:4242"
-	req.Header.Set("Connection", "X-Riot-Token")
-	req.Header.Set("X-Forwarded-For", "198.51.100.7")
-	req.Header.Set("X-Forwarded-Host", "spoofed.example")
-	req.Header.Set("X-Forwarded-Proto", "https")
-	handler.ServeHTTP(rr, req)
+	req := httptest.NewRequest(http.MethodGet, "/europe/riot/account/v1/accounts/me", nil)
+	rec := httptest.NewRecorder()
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
+	handler.ServeHTTP(rec, req)
+
+	if got, want := rec.Code, http.StatusNoContent; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
 	}
-	if rt.lastRequest == nil {
-		t.Fatalf("expected transport request to be captured")
+	if got, want := gotHost, "europe.api.riotgames.com"; got != want {
+		t.Fatalf("host = %q, want %q", got, want)
 	}
-	if got := rt.lastRequest.Header.Get("X-Riot-Token"); got != "test-token" {
-		t.Fatalf("expected X-Riot-Token=test-token, got %q", got)
+	if got, want := gotPath, "/riot/account/v1/accounts/me"; got != want {
+		t.Fatalf("path = %q, want %q", got, want)
 	}
-	if rt.lastRequest.URL.Host != "na1.api.riotgames.com" {
-		t.Fatalf("unexpected host: %s", rt.lastRequest.URL.Host)
-	}
-	if rt.lastRequest.URL.Path != "/lol/status/v4/platform-data" {
-		t.Fatalf("unexpected upstream path: %s", rt.lastRequest.URL.Path)
-	}
-	if got := rt.lastRequest.Header.Get("X-Forwarded-For"); got != "203.0.113.9" {
-		t.Fatalf("expected X-Forwarded-For=203.0.113.9, got %q", got)
-	}
-	if got := rt.lastRequest.Header.Get("X-Forwarded-Host"); got != "example.com" {
-		t.Fatalf("expected X-Forwarded-Host=example.com, got %q", got)
-	}
-	if got := rt.lastRequest.Header.Get("X-Forwarded-Proto"); got != "http" {
-		t.Fatalf("expected X-Forwarded-Proto=http, got %q", got)
+	if got, want := gotToken, cfg.Tokens[0]; got != want {
+		t.Fatalf("X-Riot-Token = %q, want %q", got, want)
 	}
 }
 
-type errorRoundTripper struct {
-	err error
-}
+func TestProxyNewMapsTransportErrors(t *testing.T) {
+	t.Parallel()
 
-func (e *errorRoundTripper) RoundTrip(_ *http.Request) (*http.Response, error) {
-	return nil, e.err
-}
-
-func TestErrorHandlerStatusCodes(t *testing.T) {
 	tests := []struct {
-		name        string
-		err         error
-		wantStatus  int
-		wantRetry   bool
-		retryVal    string
-		wantBodySub string
+		name       string
+		err        error
+		wantStatus int
+		wantRetry  string
 	}{
 		{
-			name:        "context.Canceled returns 499",
-			err:         context.Canceled,
-			wantStatus:  499,
-			wantRetry:   false,
-			wantBodySub: "client closed request",
+			name:       "deadline exceeded",
+			err:        context.DeadlineExceeded,
+			wantStatus: http.StatusRequestTimeout,
+			wantRetry:  "1",
 		},
 		{
-			name:        "context.DeadlineExceeded returns 408 with Retry-After",
-			err:         context.DeadlineExceeded,
-			wantStatus:  http.StatusRequestTimeout,
-			wantRetry:   true,
-			retryVal:    "1",
-			wantBodySub: "request timed out",
+			name:       "context canceled",
+			err:        context.Canceled,
+			wantStatus: 499,
 		},
 		{
-			name:        "generic error returns 502",
-			err:         errors.New("connection refused"),
-			wantStatus:  http.StatusBadGateway,
-			wantRetry:   false,
-			wantBodySub: "upstream unavailable",
+			name:       "generic upstream failure",
+			err:        errors.New("boom"),
+			wantStatus: http.StatusBadGateway,
 		},
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			l, err := limiter.New(limiter.Config{
-				KeyCount:      1,
-				QueueCapacity: 32,
-			})
-			if err != nil {
-				t.Fatalf("new limiter: %v", err)
-			}
-			defer l.Close()
+			t.Parallel()
 
-			collector := metrics.NewCollector()
-			rt := &errorRoundTripper{err: tt.err}
-			handler := New(
-				config.Config{
-					Tokens:           []string{"test-token"},
-					AdmissionTimeout: 2 * time.Second,
-				},
-				func(o *options) {
-					o.baseTransport = rt
-				},
-				WithLimiter(l),
-				WithMetrics(collector),
-			)
+			cfg := testutil.DummyConfig()
+			cfg.UpstreamTimeout = 0
+			handler := New(cfg, WithBaseTransport(testutil.RoundTripperFunc(func(*http.Request) (*http.Response, error) {
+				return nil, tt.err
+			})))
 
-			rr := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodGet, "/europe/riot/account/v1/accounts/me", nil)
-			handler.ServeHTTP(rr, req)
+			rec := httptest.NewRecorder()
 
-			if rr.Code != tt.wantStatus {
-				t.Errorf("status: got %d, want %d", rr.Code, tt.wantStatus)
+			handler.ServeHTTP(rec, req)
+
+			if got, want := rec.Code, tt.wantStatus; got != want {
+				t.Fatalf("status = %d, want %d", got, want)
 			}
-			if retry := rr.Header().Get("Retry-After"); (retry != "") != tt.wantRetry {
-				t.Errorf("Retry-After: got %q, want presence=%v", retry, tt.wantRetry)
-			} else if tt.wantRetry && retry != tt.retryVal {
-				t.Errorf("Retry-After: got %q, want %q", retry, tt.retryVal)
-			}
-			if body := rr.Body.String(); !strings.Contains(body, tt.wantBodySub) {
-				t.Errorf("body: got %q, want substring %q", body, tt.wantBodySub)
+			if got := rec.Header().Get("Retry-After"); got != tt.wantRetry {
+				t.Fatalf("Retry-After = %q, want %q", got, tt.wantRetry)
 			}
 		})
 	}

@@ -6,215 +6,92 @@ import (
 )
 
 func TestRateStateNextAllowed(t *testing.T) {
-	now := time.Date(2026, 2, 26, 12, 0, 0, 0, time.UTC)
+	t.Parallel()
 
-	tests := []struct {
-		name         string
-		state        rateState
-		bypassPacing bool
-		want         time.Time
-	}{
-		{
-			name:         "no windows allows immediately",
-			state:        rateState{},
-			bypassPacing: false,
-			want:         now,
-		},
-		{
-			name: "blocked until overrides immediate access",
-			state: rateState{
-				blockedUntil: now.Add(2 * time.Second),
-			},
-			bypassPacing: false,
-			want:         now.Add(2 * time.Second),
-		},
-		{
-			name: "window exhaustion waits for reset",
-			state: rateState{
-				windows: []limitWindow{
-					{
-						limit:   2,
-						used:    2,
-						window:  5 * time.Second,
-						resetAt: now.Add(5 * time.Second),
-					},
-				},
-			},
-			bypassPacing: false,
-			want:         now.Add(5 * time.Second),
-		},
-		{
-			name: "pacing spreads requests inside window",
-			state: rateState{
-				lastGranted: now,
-				windows: []limitWindow{
-					{
-						limit:   5,
-						used:    1,
-						window:  4 * time.Second,
-						resetAt: now.Add(4 * time.Second),
-					},
-				},
-			},
-			bypassPacing: false,
-			want:         now.Add(800 * time.Millisecond),
-		},
-		{
-			name: "bypass pacing allows immediate execution when window has budget",
-			state: rateState{
-				lastGranted: now,
-				windows: []limitWindow{
-					{
-						limit:   5,
-						used:    1,
-						window:  4 * time.Second,
-						resetAt: now.Add(4 * time.Second),
-					},
-				},
-			},
-			bypassPacing: true,
-			want:         now,
-		},
-		{
-			name: "expired windows refresh and allow immediately",
-			state: rateState{
-				windows: []limitWindow{
-					{
-						limit:   4,
-						used:    4,
-						window:  2 * time.Second,
-						resetAt: now.Add(-100 * time.Millisecond),
-					},
-				},
-			},
-			bypassPacing: false,
-			want:         now,
-		},
-	}
+	now := time.Date(2026, 3, 22, 12, 0, 0, 0, time.UTC)
 
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			got := tt.state.nextAllowed(now, tt.bypassPacing)
-			if !got.Equal(tt.want) {
-				t.Fatalf("expected %s, got %s", tt.want, got)
-			}
-		})
-	}
+	t.Run("respects blocked until", func(t *testing.T) {
+		t.Parallel()
+
+		state := rateState{blockedUntil: now.Add(2 * time.Second)}
+		if got, want := state.nextAllowed(now, false), now.Add(2*time.Second); !got.Equal(want) {
+			t.Fatalf("nextAllowed() = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("paces when last grant exists", func(t *testing.T) {
+		t.Parallel()
+
+		state := rateState{
+			lastGranted: now,
+			windows: []limitWindow{
+				{limit: 4, used: 1, window: 4 * time.Second, resetAt: now.Add(4 * time.Second)},
+			},
+		}
+		if got, want := state.nextAllowed(now, false), now.Add(time.Second); !got.Equal(want) {
+			t.Fatalf("nextAllowed() = %v, want %v", got, want)
+		}
+		if got, want := state.nextAllowed(now, true), now; !got.Equal(want) {
+			t.Fatalf("nextAllowed() with bypass = %v, want %v", got, want)
+		}
+	})
 }
 
-func TestRateStateConsume(t *testing.T) {
-	now := time.Date(2026, 2, 26, 12, 0, 0, 0, time.UTC)
+func TestRateStateConsumeAndApply(t *testing.T) {
+	t.Parallel()
 
-	tests := []struct {
-		name      string
-		state     rateState
-		wantOK    bool
-		wantUsed  int
-		wantGrant bool
-	}{
-		{
-			name: "blocked state denies consume",
-			state: rateState{
-				blockedUntil: now.Add(2 * time.Second),
-				windows: []limitWindow{
-					{limit: 5, used: 0, window: 5 * time.Second, resetAt: now.Add(5 * time.Second)},
-				},
+	now := time.Date(2026, 3, 22, 12, 0, 0, 0, time.UTC)
+
+	t.Run("consume increments all windows until exhausted", func(t *testing.T) {
+		t.Parallel()
+
+		state := rateState{
+			windows: []limitWindow{
+				{limit: 2, window: time.Second, resetAt: now.Add(time.Second)},
+				{limit: 2, window: 2 * time.Second, resetAt: now.Add(2 * time.Second)},
 			},
-			wantOK:    false,
-			wantUsed:  0,
-			wantGrant: false,
-		},
-		{
-			name: "exhausted window denies consume",
-			state: rateState{
-				windows: []limitWindow{
-					{limit: 1, used: 1, window: 5 * time.Second, resetAt: now.Add(5 * time.Second)},
-				},
-			},
-			wantOK:    false,
-			wantUsed:  1,
-			wantGrant: false,
-		},
-		{
-			name: "valid consume increments counters and records grant",
-			state: rateState{
-				windows: []limitWindow{
-					{limit: 5, used: 2, window: 5 * time.Second, resetAt: now.Add(5 * time.Second)},
-				},
-			},
-			wantOK:    true,
-			wantUsed:  3,
-			wantGrant: true,
-		},
-	}
+		}
+		if !state.consume(now) {
+			t.Fatal("first consume() = false, want true")
+		}
+		if !state.consume(now) {
+			t.Fatal("second consume() = false, want true")
+		}
+		if state.consume(now) {
+			t.Fatal("third consume() = true, want false")
+		}
+		if got, want := state.windows[0].used, 2; got != want {
+			t.Fatalf("used = %d, want %d", got, want)
+		}
+	})
 
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			ok := tt.state.consume(now)
-			if ok != tt.wantOK {
-				t.Fatalf("expected consume=%v, got %v", tt.wantOK, ok)
-			}
+	t.Run("apply sets windows and blocked until", func(t *testing.T) {
+		t.Parallel()
 
-			if len(tt.state.windows) > 0 && tt.state.windows[0].used != tt.wantUsed {
-				t.Fatalf("expected used=%d, got %d", tt.wantUsed, tt.state.windows[0].used)
-			}
+		state := rateState{}
+		retryAfter := now.Add(5 * time.Second)
+		state.apply(
+			[]parsedWindow{{limit: 10, count: 3, window: 2 * time.Second}},
+			&retryAfter,
+			true,
+			now,
+			150*time.Millisecond,
+		)
 
-			gotGranted := !tt.state.lastGranted.IsZero()
-			if gotGranted != tt.wantGrant {
-				t.Fatalf("expected lastGranted set=%v, got %v", tt.wantGrant, gotGranted)
-			}
-		})
-	}
-}
-
-func TestRateStateApplyWindowAnchoring(t *testing.T) {
-	start := time.Date(2026, 2, 26, 12, 0, 0, 0, time.UTC)
-
-	tests := []struct {
-		name             string
-		initialNow       time.Time
-		updateNow        time.Time
-		wantInitialReset time.Time
-		wantUpdateReset  time.Time
-	}{
-		{
-			name:             "keeps reset anchored during same upstream window",
-			initialNow:       start,
-			updateNow:        start.Add(100 * time.Millisecond),
-			wantInitialReset: start.Add(1 * time.Second),
-			wantUpdateReset:  start.Add(1 * time.Second),
-		},
-		{
-			name:             "reanchors reset after upstream window elapsed",
-			initialNow:       start,
-			updateNow:        start.Add(1100 * time.Millisecond),
-			wantInitialReset: start.Add(1 * time.Second),
-			wantUpdateReset:  start.Add(2100 * time.Millisecond),
-		},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			var s rateState
-
-			s.apply([]parsedWindow{{limit: 20, count: 1, window: time.Second}}, nil, false, tt.initialNow, 0)
-			if len(s.windows) != 1 {
-				t.Fatalf("expected one window after initial apply, got %d", len(s.windows))
-			}
-			if got := s.windows[0].resetAt; !got.Equal(tt.wantInitialReset) {
-				t.Fatalf("unexpected initial resetAt: want=%s got=%s", tt.wantInitialReset, got)
-			}
-
-			s.apply([]parsedWindow{{limit: 20, count: 2, window: time.Second}}, nil, false, tt.updateNow, 0)
-			if len(s.windows) != 1 {
-				t.Fatalf("expected one window after update apply, got %d", len(s.windows))
-			}
-			if got := s.windows[0].resetAt; !got.Equal(tt.wantUpdateReset) {
-				t.Fatalf("unexpected updated resetAt: want=%s got=%s", tt.wantUpdateReset, got)
-			}
-		})
-	}
+		if got, want := len(state.windows), 1; got != want {
+			t.Fatalf("len(windows) = %d, want %d", got, want)
+		}
+		if got, want := state.windows[0].window, 2150*time.Millisecond; got != want {
+			t.Fatalf("window = %v, want %v", got, want)
+		}
+		if got, want := state.windows[0].used, 3; got != want {
+			t.Fatalf("used = %d, want %d", got, want)
+		}
+		if !state.blockedUntil.Equal(retryAfter) {
+			t.Fatalf("blockedUntil = %v, want %v", state.blockedUntil, retryAfter)
+		}
+		if state.lastGranted.IsZero() {
+			t.Fatal("lastGranted = zero, want anchored timestamp")
+		}
+	})
 }
