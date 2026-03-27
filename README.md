@@ -74,57 +74,11 @@ Supported environment variables:
 | `ADMISSION_TIMEOUT` | `5m` | Max wait time for admission (how long a request can wait in the queue) |
 | `ADDITIONAL_WINDOW_SIZE` | `150ms` | Extra buffer added to rate limit windows |
 | `SHUTDOWN_TIMEOUT` | `20s` | Graceful shutdown timeout |
-| `UPSTREAM_TIMEOUT` | `0` | Timeout for upstream requests (0 = no timeout) |
-| `ENABLE_METRICS` | `true` | Enable `/metrics` endpoint |
-| `ENABLE_PPROF` | `false` | Enable pprof endpoints |
-| `ENABLE_SWAGGER` | `true` | Enable Swagger UI |
-| `DEFAULT_APP_RATE_LIMIT` | `20:1,100:120` | Default app rate limits before first upstream response |
 
-## Endpoints
+## Contributing
 
-- **Health check**: `GET /healthz`
-- **Metrics**: `GET /metrics` (when enabled)
-- **Swagger UI**: `GET /swagger/` (when enabled)
-- **pprof**: `/debug/pprof/*` (when enabled)
+Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change. Ensure that you run `go fmt` and follow standard Go conventions before submitting code.
 
-## How it works
+## License
 
-When requests come in, RiftRelay figures out which rate limit bucket they belong to and adds them to a queue. A scheduler picks requests from the queue and sends them when there's room in the rate limit window. Instead of sending all requests at once when the limit resets, RiftRelay spreads them out evenly over time to avoid sudden bursts.
-
-If there's no room in the rate limit window, RiftRelay returns `429 Too Many Requests` with a `Retry-After` header telling you when to try again. Requests that do get through are sent to Riot's API, and RiftRelay keeps track of the rate limits based on the response headers it gets back.
-
-## Development
-
-Run tests:
-
-```bash
-go test ./...
-```
-
-With race detection:
-
-```bash
-go test -race ./...
-```
-
-Benchmarks:
-
-```bash
-go test -run '^$' -bench . -benchmem ./internal/limiter ./internal/proxy
-```
-
-## Project structure
-
-- `main.go` - Entry point and signal handling
-- `internal/app` - Server lifecycle and routing
-- `internal/config` - Environment configuration
-- `internal/router` - Path parsing and bucket keys
-- `internal/limiter` - Admission control and scheduling
-- `internal/proxy` - Reverse proxy adapter
-- `internal/transport` - HTTP transport configuration
-- `internal/metrics` - Metrics collection
-
-## Notes
-
-- On shutdown, the server drains pending requests within `SHUTDOWN_TIMEOUT`
-- Invalid routes return `400 Bad Request`
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
