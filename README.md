@@ -112,19 +112,3 @@ Benchmarks:
 ```bash
 go test -run '^$' -bench . -benchmem ./internal/limiter ./internal/proxy
 ```
-
-## Project structure
-
-- `main.go` - Entry point and signal handling
-- `internal/app` - Server lifecycle and routing
-- `internal/config` - Environment configuration
-- `internal/router` - Path parsing and bucket keys
-- `internal/limiter` - Admission control and scheduling
-- `internal/proxy` - Reverse proxy adapter
-- `internal/transport` - HTTP transport configuration
-- `internal/metrics` - Metrics collection
-
-## Notes
-
-- On shutdown, the server drains pending requests within `SHUTDOWN_TIMEOUT`
-- Invalid routes return `400 Bad Request`
