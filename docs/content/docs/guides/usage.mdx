@@ -28,6 +28,10 @@ RiftRelay injects `RIOT_TOKEN` automatically. Don't send your token from the cli
 
 Send `X-Priority: high` for latency-sensitive requests. It skips pacing delay but still respects rate limits. See [priority requests](/docs/guides/priority-requests).
 
+### `X-Rate-Budget`
+
+Send `X-Rate-Budget: <id>` to use a server-configured pacing budget. Unknown IDs return `400`. See [rate budgets](/docs/guides/rate-budgets).
+
 ### `X-Riot-Token-Index`
 
 If you have multiple tokens configured (`RIOT_TOKEN=a,b,c`), you can pin a request to a specific token by passing its 0-based index. Omit the header and RiftRelay picks the best available token. Out-of-bounds values return `400`.

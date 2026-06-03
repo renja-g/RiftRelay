@@ -1,0 +1,40 @@
+---
+title: Rate Budgets
+description: Pace labeled clients at a configured share of the full Riot API limit.
+icon: Gauge
+---
+
+Rate budgets are soft pacing hints for labeled clients. They are not reservations and they do not create priority.
+
+Configure a budget ID on the server:
+
+```text
+RATE_BUDGET_worker=0.8
+```
+
+Send that ID with requests:
+
+```sh
+curl -H "X-Rate-Budget: worker" \
+  "http://localhost:8985/europe/lol/match/v5/matches/EUW1_123"
+```
+
+`worker` now spaces requests as if each Riot limit were 80% of the full limit. If the upstream limit is `100:120`, worker pacing targets about 80 requests per 120 seconds. Default traffic still paces against the full `100:120`; it does not subtract from worker's 80% target.
+
+## Bucket overrides
+
+Use an override when one budget needs a different share for one endpoint:
+
+```text
+RATE_BUDGET_worker=0.8
+RATE_BUDGET_worker_OVERRIDES=lol/match/v5/matches/{matchId}=0.6
+```
+
+The override value can include multiple comma-separated `bucket=share` entries. Each bucket matches either the exact limiter bucket (`europe:lol/...`) or the endpoint suffix after the region (`lol/...`).
+
+## Behavior
+
+- Unknown `X-Rate-Budget` IDs return `400 Bad Request`.
+- Omitted `X-Rate-Budget` uses default full-limit pacing.
+- Queue order remains FIFO within the same priority tier.
+- `X-Priority: high` still skips pacing delay, but it must fit within Riot's shared hard limits.

@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -40,7 +41,13 @@ type Config struct {
 	SwaggerEnabled   bool
 	UpstreamTimeout  time.Duration
 	DefaultAppLimits string
+	RateBudgets      map[string]RateBudget
 	Server           ServerConfig
+}
+
+type RateBudget struct {
+	Share        float64
+	BucketShares map[string]float64
 }
 
 type ServerConfig struct {
@@ -90,6 +97,7 @@ func Load() (Config, error) {
 	mustParseBool("ENABLE_SWAGGER", &cfg.SwaggerEnabled, &errs)
 
 	mustParseRateLimit("DEFAULT_APP_RATE_LIMIT", &cfg.DefaultAppLimits, &errs)
+	cfg.RateBudgets = parseRateBudgets(&errs)
 
 	if cfg.Port > 65535 {
 		errs = append(errs, fmt.Errorf("PORT must be <= 65535"))
@@ -107,6 +115,29 @@ func Load() (Config, error) {
 	cfg.Server.WriteTimeout = cfg.AdmissionTimeout + upstreamBudget + 30*time.Second
 
 	return cfg, nil
+}
+
+func (c Config) RateBudgetShare(id, bucket string) (float64, bool) {
+	id = strings.TrimSpace(id)
+	if id == "" || id == "default" {
+		return 1, true
+	}
+
+	budget, ok := c.RateBudgets[id]
+	if !ok || budget.Share <= 0 {
+		return 0, false
+	}
+
+	if share, ok := budget.BucketShares[bucket]; ok {
+		return share, true
+	}
+	if idx := strings.IndexByte(bucket, ':'); idx >= 0 {
+		if share, ok := budget.BucketShares[bucket[idx+1:]]; ok {
+			return share, true
+		}
+	}
+
+	return budget.Share, true
 }
 
 func splitCSVEnv(key string) []string {
@@ -201,4 +232,120 @@ func mustParseRateLimit(key string, dst *string, errs *[]error) {
 		}
 	}
 	*dst = value
+}
+
+func parseRateBudgets(errs *[]error) map[string]RateBudget {
+	const prefix = "RATE_BUDGET_"
+	const overridesSuffix = "_OVERRIDES"
+
+	budgets := make(map[string]RateBudget)
+	for _, env := range os.Environ() {
+		key, value, ok := strings.Cut(env, "=")
+		if !ok || !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+
+		name := strings.TrimPrefix(key, prefix)
+		if strings.HasSuffix(name, overridesSuffix) {
+			id := strings.TrimSuffix(name, overridesSuffix)
+			if !validRateBudgetID(id) || id == "default" {
+				*errs = append(*errs, fmt.Errorf("%s has invalid budget id %q", key, id))
+				continue
+			}
+			addRateBudgetOverrides(key, id, value, budgets, errs)
+			continue
+		}
+
+		id, bucket, hasBucket := strings.Cut(name, ":")
+		bucket = strings.TrimSpace(bucket)
+		if !validRateBudgetID(id) || id == "default" {
+			*errs = append(*errs, fmt.Errorf("%s has invalid budget id %q", key, id))
+			continue
+		}
+		if hasBucket && bucket == "" {
+			*errs = append(*errs, fmt.Errorf("%s must include a bucket after ':'", key))
+			continue
+		}
+
+		share, ok := parseRateBudgetShare(key, value, errs)
+		if !ok {
+			continue
+		}
+
+		budget := budgets[id]
+		if hasBucket {
+			if budget.BucketShares == nil {
+				budget.BucketShares = make(map[string]float64)
+			}
+			budget.BucketShares[bucket] = share
+		} else {
+			budget.Share = share
+		}
+		budgets[id] = budget
+	}
+
+	for id, budget := range budgets {
+		if budget.Share <= 0 {
+			*errs = append(*errs, fmt.Errorf("RATE_BUDGET_%s must be set when bucket overrides are configured", id))
+		}
+	}
+	if len(budgets) == 0 {
+		return nil
+	}
+	return budgets
+}
+
+func addRateBudgetOverrides(key, id, value string, budgets map[string]RateBudget, errs *[]error) {
+	budget := budgets[id]
+	if budget.BucketShares == nil {
+		budget.BucketShares = make(map[string]float64)
+	}
+
+	for _, part := range strings.Split(value, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		bucket, rawShare, ok := strings.Cut(part, "=")
+		bucket = strings.TrimSpace(bucket)
+		if !ok || bucket == "" {
+			*errs = append(*errs, fmt.Errorf("%s overrides must be in format 'bucket=share,bucket=share'", key))
+			continue
+		}
+
+		share, ok := parseRateBudgetShare(key, strings.TrimSpace(rawShare), errs)
+		if !ok {
+			continue
+		}
+		budget.BucketShares[bucket] = share
+	}
+
+	budgets[id] = budget
+}
+
+func parseRateBudgetShare(key, value string, errs *[]error) (float64, bool) {
+	share, err := strconv.ParseFloat(value, 64)
+	if err != nil || share <= 0 || share > 1 || math.IsNaN(share) || math.IsInf(share, 0) {
+		*errs = append(*errs, fmt.Errorf("%s must be a number > 0 and <= 1", key))
+		return 0, false
+	}
+	return share, true
+}
+
+func validRateBudgetID(id string) bool {
+	if id == "" {
+		return false
+	}
+	for _, r := range id {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-' {
+			continue
+		}
+		return false
+	}
+	return true
 }

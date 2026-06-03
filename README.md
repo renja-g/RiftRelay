@@ -8,7 +8,7 @@ Big shoutout to [DarkIntaqt](https://github.com/DarkIntaqt) and [cosmic-radiance
 
 ## What it does
 
-RiftRelay sits between your application and Riot's API, managing rate limits intelligently so you don't have to. By default it will spread requests evenly across the remaining rate limit window. If you need to send requests with higher priority, you can add the `X-Priority: high` header to bypass the pacing delay but still respect the rate limit.
+RiftRelay sits between your application and Riot's API, managing rate limits intelligently so you don't have to. By default it will spread requests evenly across the remaining rate limit window. You can use `X-Priority: high` to bypass pacing delay, or `X-Rate-Budget` to pace a labeled client at a configured share of the full limit.
 
 ## Quick start
 
@@ -45,6 +45,13 @@ For high-priority requests, add the `X-Priority: high` header to bypass pacing d
 curl -H "X-Priority: high" "http://localhost:8985/europe/riot/account/v1/accounts/by-riot-id/Someone/EUW1"
 ```
 
+For a configured rate budget, add `X-Rate-Budget: <id>`. Unknown IDs return `400 Bad Request`.
+
+```bash
+export RATE_BUDGET_worker=0.8
+curl -H "X-Rate-Budget: worker" "http://localhost:8985/europe/riot/account/v1/accounts/by-riot-id/Someone/EUW1"
+```
+
 To force a request to use a specific API token from the `RIOT_TOKEN` pool, use the `X-Riot-Token-Index` header (0-indexed). This is useful if you provide multiple tokens using `RIOT_TOKEN=a,b,c` and want to explicitly use a specific one for certain requests:
 
 ```bash
@@ -79,6 +86,8 @@ Supported environment variables:
 | `ENABLE_PPROF` | `false` | Enable pprof endpoints |
 | `ENABLE_SWAGGER` | `true` | Enable Swagger UI |
 | `DEFAULT_APP_RATE_LIMIT` | `20:1,100:120` | Default app rate limits before first upstream response |
+| `RATE_BUDGET_<id>` | unset | Pace `X-Rate-Budget: <id>` at this share of the full limit (`0 < share <= 1`) |
+| `RATE_BUDGET_<id>_OVERRIDES` | unset | Optional `bucket=share,bucket=share` overrides for a budget |
 
 ## Endpoints
 
@@ -92,6 +101,8 @@ Supported environment variables:
 When requests come in, RiftRelay figures out which rate limit bucket they belong to and adds them to a queue. A scheduler picks requests from the queue and sends them when there's room in the rate limit window. Instead of sending all requests at once when the limit resets, RiftRelay spreads them out evenly over time to avoid sudden bursts.
 
 If there's no room in the rate limit window, RiftRelay returns `429 Too Many Requests` with a `Retry-After` header telling you when to try again. Requests that do get through are sent to Riot's API, and RiftRelay keeps track of the rate limits based on the response headers it gets back.
+
+Rate budgets are one-sided pacing hints. A budget such as `RATE_BUDGET_worker=0.8` makes `X-Rate-Budget: worker` space requests as if the limit were 80% of the full Riot limit, but it does not reserve the remaining 20% for other traffic. Other traffic still uses normal full-limit pacing and all traffic shares the same hard Riot counters.
 
 ## Development
 

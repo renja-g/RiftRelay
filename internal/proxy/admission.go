@@ -16,6 +16,7 @@ import (
 type admissionContext struct {
 	Region    string
 	Bucket    string
+	BudgetID  string
 	KeyIndex  int
 	Priority  string
 	StartedAt time.Time
@@ -50,6 +51,12 @@ func admissionMiddleware(
 				priority = limiter.PriorityHigh
 			}
 
+			budgetID := strings.TrimSpace(r.Header.Get("X-Rate-Budget"))
+			if strings.EqualFold(budgetID, "default") {
+				budgetID = ""
+			}
+			budgetLabel := admissionBudgetLabel(budgetID)
+
 			var tokenIndex *int
 			if val := r.Header.Get("X-Riot-Token-Index"); val != "" {
 				parsed, err := strconv.Atoi(val)
@@ -75,15 +82,22 @@ func admissionMiddleware(
 			ticket, err := l.Admit(admitCtx, limiter.Admission{
 				Region:     info.Region,
 				Bucket:     info.Bucket,
+				BudgetID:   budgetID,
 				Priority:   priority,
 				TokenIndex: tokenIndex,
 			})
 			waitDuration := time.Since(start)
 
 			if err != nil {
-				if rejected, ok := err.(*limiter.RejectedError); ok && rejected.Reason == "invalid_token_index" {
-					http.Error(w, "invalid X-Riot-Token-Index: index out of range", http.StatusBadRequest)
-					return
+				if rejected, ok := err.(*limiter.RejectedError); ok {
+					if rejected.Reason == "invalid_token_index" {
+						http.Error(w, "invalid X-Riot-Token-Index: index out of range", http.StatusBadRequest)
+						return
+					}
+					if rejected.Reason == "invalid_budget" {
+						http.Error(w, "unknown X-Rate-Budget", http.StatusBadRequest)
+						return
+					}
 				}
 
 				if m != nil {
@@ -97,8 +111,8 @@ func admissionMiddleware(
 					} else if err == context.DeadlineExceeded || err == context.Canceled {
 						reason = "rejected_timeout"
 					}
-					m.ObserveAdmissionResult(reason, info.Region, info.Bucket, priority.String())
-					m.ObserveQueueWait(info.Bucket, priority, waitDuration)
+					m.ObserveAdmissionResult(reason, info.Region, info.Bucket, priority.String(), budgetLabel)
+					m.ObserveQueueWait(info.Bucket, priority, budgetLabel, waitDuration)
 				}
 				log.Printf("admission_reject region=%s bucket=%s priority=%s err=%v", info.Region, info.Bucket, priority.String(), err)
 
@@ -113,14 +127,15 @@ func admissionMiddleware(
 			}
 
 			if m != nil {
-				m.ObserveQueueWait(info.Bucket, priority, waitDuration)
-				m.ObserveAdmissionResult("allowed", info.Region, info.Bucket, priority.String())
+				m.ObserveQueueWait(info.Bucket, priority, budgetLabel, waitDuration)
+				m.ObserveAdmissionResult("allowed", info.Region, info.Bucket, priority.String(), budgetLabel)
 			}
 
 			ctx := withKeyIndex(r.Context(), ticket.KeyIndex)
 			ctx = withAdmission(ctx, admissionContext{
 				Region:    info.Region,
 				Bucket:    info.Bucket,
+				BudgetID:  budgetLabel,
 				KeyIndex:  ticket.KeyIndex,
 				Priority:  priority.String(),
 				StartedAt: time.Now(), // Captured after admission so upstream_duration excludes queue wait
@@ -128,4 +143,12 @@ func admissionMiddleware(
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+func admissionBudgetLabel(budgetID string) string {
+	budgetID = strings.TrimSpace(budgetID)
+	if budgetID == "" {
+		return "default"
+	}
+	return budgetID
 }

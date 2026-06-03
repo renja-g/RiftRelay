@@ -12,6 +12,7 @@ You send requests to RiftRelay instead of directly to the Riot Games API. It val
 - Tracks app and method rate limits from Riot response headers
 - Spreads requests evenly across the remaining window instead of bursting at the reset boundary (you still use 100% of your quota)
 - Supports `X-Priority: high` for latency-sensitive traffic — see [priority requests](/docs/guides/priority-requests)
+- Supports `X-Rate-Budget` for labeled client pacing — see [rate budgets](/docs/guides/rate-budgets)
 - Exposes `/healthz`, optional `/metrics`, `/debug/pprof/`, and `/swagger/` — see [endpoints](/docs/reference/endpoints)
 
 ## How requests flow
@@ -32,3 +33,4 @@ Only `RIOT_TOKEN` is required. Everything else has defaults. See the [configurat
 - [Quickstart](/docs/quickstart) — run RiftRelay locally
 - [Configuration](/docs/reference/configuration) — env vars and defaults
 - [Usage](/docs/guides/usage) — request format and behavior
+- [Rate Budgets](/docs/guides/rate-budgets) — labeled client pacing
