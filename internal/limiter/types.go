@@ -22,6 +22,7 @@ func (p Priority) String() string {
 type Admission struct {
 	Region     string
 	Bucket     string
+	BudgetID   string
 	Priority   Priority
 	TokenIndex *int
 }
@@ -53,6 +54,12 @@ type Config struct {
 	Clock            Clock
 	Metrics          MetricsSink
 	DefaultAppLimits string
+	RateBudgets      map[string]BudgetConfig
+}
+
+type BudgetConfig struct {
+	Share        float64
+	BucketShares map[string]float64
 }
 
 type RejectedError struct {
@@ -65,10 +72,11 @@ func (e *RejectedError) Error() string {
 }
 
 type admitRequest struct {
-	ctx       context.Context
-	admission Admission
-	received  time.Time
-	resp      chan admitResponse
+	ctx         context.Context
+	admission   Admission
+	budgetShare float64
+	received    time.Time
+	resp        chan admitResponse
 }
 
 type admitResponse struct {

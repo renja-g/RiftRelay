@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -30,6 +31,9 @@ func New(cfg Config) (*Limiter, error) {
 	if cfg.Clock == nil {
 		cfg.Clock = realClock{}
 	}
+	if err := validateRateBudgets(cfg.RateBudgets); err != nil {
+		return nil, err
+	}
 
 	l := &Limiter{
 		cfg:       cfg,
@@ -43,18 +47,24 @@ func New(cfg Config) (*Limiter, error) {
 }
 
 func (l *Limiter) Admit(ctx context.Context, admission Admission) (Ticket, error) {
+	admission.BudgetID = normalizeBudgetID(admission.BudgetID)
 	if admission.Region == "" || admission.Bucket == "" {
 		return Ticket{}, &RejectedError{Reason: "invalid_route"}
 	}
 	if admission.TokenIndex != nil && (*admission.TokenIndex < 0 || *admission.TokenIndex >= l.cfg.KeyCount) {
 		return Ticket{}, &RejectedError{Reason: "invalid_token_index"}
 	}
+	budgetShare, ok := l.cfg.budgetShare(admission.BudgetID, admission.Bucket)
+	if !ok {
+		return Ticket{}, &RejectedError{Reason: "invalid_budget"}
+	}
 
 	req := &admitRequest{
-		ctx:       ctx,
-		admission: admission,
-		received:  l.cfg.Clock.Now(),
-		resp:      make(chan admitResponse, 1),
+		ctx:         ctx,
+		admission:   admission,
+		budgetShare: budgetShare,
+		received:    l.cfg.Clock.Now(),
+		resp:        make(chan admitResponse, 1),
 	}
 
 	select {
@@ -168,7 +178,7 @@ func (l *Limiter) handleAdmit(
 
 	if bucket.depth() >= l.cfg.QueueCapacity {
 		now := l.cfg.Clock.Now()
-		_, earliest := l.pickKey(now, keys, bucket.region, bucket.bucket, req.admission.Priority, req.admission.TokenIndex)
+		_, earliest := l.pickKey(now, keys, bucket.region, bucket.bucket, req.admission.Priority, req.admission.TokenIndex, req.admission.BudgetID, req.budgetShare)
 		req.resp <- admitResponse{
 			err: &RejectedError{
 				Reason:     "queue_full",
@@ -269,7 +279,7 @@ func (l *Limiter) dispatch(bucket *bucketQueue, keys []keyState, wakeups *wakeHe
 		}
 
 		now := l.cfg.Clock.Now()
-		keyIndex, earliest := l.pickKey(now, keys, bucket.region, bucket.bucket, req.admission.Priority, req.admission.TokenIndex)
+		keyIndex, earliest := l.pickKey(now, keys, bucket.region, bucket.bucket, req.admission.Priority, req.admission.TokenIndex, req.admission.BudgetID, req.budgetShare)
 		if keyIndex < 0 {
 			req.resp <- admitResponse{err: &RejectedError{Reason: "no_available_key", RetryAfter: time.Second}}
 			continue
@@ -283,7 +293,8 @@ func (l *Limiter) dispatch(bucket *bucketQueue, keys []keyState, wakeups *wakeHe
 			wakeAt = earliest
 		} else {
 			key := &keys[keyIndex]
-			if !key.app(bucket.region, now, l.cfg.AdditionalWindow).consume(now) || !key.method(bucket.bucket, now, l.cfg.AdditionalWindow).consume(now) {
+			if !key.app(bucket.region, now, l.cfg.AdditionalWindow).consume(now, req.admission.BudgetID) ||
+				!key.method(bucket.bucket, now, l.cfg.AdditionalWindow).consume(now, req.admission.BudgetID) {
 				cannotServe = true
 				wakeAt = now.Add(5 * time.Millisecond)
 			}
@@ -320,7 +331,16 @@ func (l *Limiter) dispatch(bucket *bucketQueue, keys []keyState, wakeups *wakeHe
 	}
 }
 
-func (l *Limiter) pickKey(now time.Time, keys []keyState, region, bucket string, priority Priority, forcedTokenIndex *int) (int, time.Time) {
+func (l *Limiter) pickKey(
+	now time.Time,
+	keys []keyState,
+	region string,
+	bucket string,
+	priority Priority,
+	forcedTokenIndex *int,
+	budgetID string,
+	budgetShare float64,
+) (int, time.Time) {
 	bestIndex := -1
 	bestAt := time.Time{}
 	bypassPacing := priority == PriorityHigh
@@ -331,8 +351,8 @@ func (l *Limiter) pickKey(now time.Time, keys []keyState, region, bucket string,
 		}
 
 		key := &keys[i]
-		appAt := key.app(region, now, l.cfg.AdditionalWindow).nextAllowed(now, bypassPacing)
-		methodAt := key.method(bucket, now, l.cfg.AdditionalWindow).nextAllowed(now, bypassPacing)
+		appAt := key.app(region, now, l.cfg.AdditionalWindow).nextAllowed(now, budgetID, budgetShare, bypassPacing)
+		methodAt := key.method(bucket, now, l.cfg.AdditionalWindow).nextAllowed(now, budgetID, budgetShare, bypassPacing)
 		readyAt := appAt
 		if methodAt.After(readyAt) {
 			readyAt = methodAt
@@ -348,6 +368,72 @@ func (l *Limiter) pickKey(now time.Time, keys []keyState, region, bucket string,
 		return -1, now.Add(time.Second)
 	}
 	return bestIndex, bestAt
+}
+
+func (cfg Config) budgetShare(id, bucket string) (float64, bool) {
+	id = normalizeBudgetID(id)
+	if id == defaultBudgetID {
+		return 1, true
+	}
+
+	budget, ok := cfg.RateBudgets[id]
+	if !ok || budget.Share <= 0 {
+		return 0, false
+	}
+	if share, ok := budget.BucketShares[bucket]; ok {
+		return share, true
+	}
+	if idx := strings.IndexByte(bucket, ':'); idx >= 0 {
+		if share, ok := budget.BucketShares[bucket[idx+1:]]; ok {
+			return share, true
+		}
+	}
+	return budget.Share, true
+}
+
+func validateRateBudgets(budgets map[string]BudgetConfig) error {
+	for id, budget := range budgets {
+		if normalizeBudgetID(id) == defaultBudgetID || !validBudgetID(id) {
+			return fmt.Errorf("invalid rate budget id %q", id)
+		}
+		if !validBudgetShare(budget.Share) {
+			return fmt.Errorf("rate budget %q share must be > 0 and <= 1", id)
+		}
+		for bucket, share := range budget.BucketShares {
+			if bucket == "" || bucket != strings.TrimSpace(bucket) {
+				return fmt.Errorf("rate budget %q has empty bucket override", id)
+			}
+			if !validBudgetShare(share) {
+				return fmt.Errorf("rate budget %q bucket %q share must be > 0 and <= 1", id, bucket)
+			}
+		}
+	}
+	return nil
+}
+
+func validBudgetID(id string) bool {
+	if id == "" || id != strings.TrimSpace(id) {
+		return false
+	}
+	for _, r := range id {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func validBudgetShare(share float64) bool {
+	return share > 0 && share <= 1 && !math.IsNaN(share) && !math.IsInf(share, 0)
+}
+
+func normalizeBudgetID(id string) string {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return defaultBudgetID
+	}
+	return id
 }
 
 func resetTimer(timer *time.Timer, duration time.Duration) {

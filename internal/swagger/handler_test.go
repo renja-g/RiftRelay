@@ -90,14 +90,21 @@ func TestHandlerServeHTTP(t *testing.T) {
 
 		parameters := getOp["parameters"].([]any)
 		foundPriority := 0
+		foundBudget := 0
 		for _, raw := range parameters {
 			param := raw.(map[string]any)
 			if param["name"] == priorityHeaderName {
 				foundPriority++
 			}
+			if param["name"] == rateBudgetHeaderName {
+				foundBudget++
+			}
 		}
 		if got, want := foundPriority, 1; got != want {
 			t.Fatalf("priority header count = %d, want %d", got, want)
+		}
+		if got, want := foundBudget, 1; got != want {
+			t.Fatalf("rate budget header count = %d, want %d", got, want)
 		}
 	})
 

@@ -56,6 +56,7 @@ func New(cfg config.Config, opts ...Option) (*Server, error) {
 		QueueCapacity:    cfg.QueueCapacity,
 		AdditionalWindow: cfg.AdditionalWindow,
 		DefaultAppLimits: cfg.DefaultAppLimits,
+		RateBudgets:      limiterRateBudgets(cfg.RateBudgets),
 	}
 	if collector != nil {
 		limiterCfg.Metrics = collector
@@ -113,6 +114,25 @@ func New(cfg config.Config, opts ...Option) (*Server, error) {
 		server:  srv,
 		limiter: l,
 	}, nil
+}
+
+func limiterRateBudgets(budgets map[string]config.RateBudget) map[string]limiter.BudgetConfig {
+	if len(budgets) == 0 {
+		return nil
+	}
+
+	out := make(map[string]limiter.BudgetConfig, len(budgets))
+	for id, budget := range budgets {
+		bucketShares := make(map[string]float64, len(budget.BucketShares))
+		for bucket, share := range budget.BucketShares {
+			bucketShares[bucket] = share
+		}
+		out[id] = limiter.BudgetConfig{
+			Share:        budget.Share,
+			BucketShares: bucketShares,
+		}
+	}
+	return out
 }
 
 func (s *Server) Handler() http.Handler {

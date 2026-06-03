@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -28,6 +29,9 @@ func TestLoad(t *testing.T) {
 				}
 				if got, want := cfg.Server.WriteTimeout, defaultAdmissionTimeout+5*time.Minute+30*time.Second; got != want {
 					t.Fatalf("Server.WriteTimeout = %v, want %v", got, want)
+				}
+				if len(cfg.RateBudgets) != 0 {
+					t.Fatalf("RateBudgets = %v, want empty", cfg.RateBudgets)
 				}
 			},
 		},
@@ -72,6 +76,34 @@ func TestLoad(t *testing.T) {
 			},
 		},
 		{
+			name: "rate budgets",
+			env: map[string]string{
+				"RIOT_TOKEN":                   "token-a",
+				"RATE_BUDGET_worker":           "0.8",
+				"RATE_BUDGET_worker_OVERRIDES": "lol/match/v5/matches/{matchId}=0.6,europe:riot/account/v1/accounts/me=0.5",
+			},
+			assertCfg: func(t *testing.T, cfg Config) {
+				t.Helper()
+				if got, want := cfg.RateBudgets["worker"].Share, 0.8; got != want {
+					t.Fatalf("worker share = %v, want %v", got, want)
+				}
+				share, ok := cfg.RateBudgetShare("worker", "europe:lol/match/v5/matches/{matchId}")
+				if !ok {
+					t.Fatal("RateBudgetShare() ok = false, want true")
+				}
+				if got, want := share, 0.6; got != want {
+					t.Fatalf("RateBudgetShare() = %v, want %v", got, want)
+				}
+				share, ok = cfg.RateBudgetShare("worker", "europe:riot/account/v1/accounts/me")
+				if !ok {
+					t.Fatal("RateBudgetShare() ok = false, want true")
+				}
+				if got, want := share, 0.5; got != want {
+					t.Fatalf("RateBudgetShare() = %v, want %v", got, want)
+				}
+			},
+		},
+		{
 			name: "aggregates validation errors",
 			env: map[string]string{
 				"PORT":                   "70000",
@@ -79,6 +111,8 @@ func TestLoad(t *testing.T) {
 				"ADMISSION_TIMEOUT":      "nope",
 				"ENABLE_METRICS":         "sometimes",
 				"DEFAULT_APP_RATE_LIMIT": "bad",
+				"RATE_BUDGET_default":    "0.5",
+				"RATE_BUDGET_worker":     "1.5",
 			},
 			wantErr: []string{
 				"RIOT_TOKEN env var is required",
@@ -87,6 +121,8 @@ func TestLoad(t *testing.T) {
 				"ADMISSION_TIMEOUT must be a valid duration",
 				"ENABLE_METRICS must be a boolean",
 				"DEFAULT_APP_RATE_LIMIT must be in format",
+				"RATE_BUDGET_default has invalid budget id",
+				"RATE_BUDGET_worker must be a number > 0 and <= 1",
 			},
 		},
 	}
@@ -108,6 +144,12 @@ func TestLoad(t *testing.T) {
 				"DEFAULT_APP_RATE_LIMIT",
 			} {
 				t.Setenv(key, "")
+			}
+			for _, env := range os.Environ() {
+				key, _, ok := strings.Cut(env, "=")
+				if ok && strings.HasPrefix(key, "RATE_BUDGET_") {
+					t.Setenv(key, "")
+				}
 			}
 			for key, value := range tt.env {
 				t.Setenv(key, value)

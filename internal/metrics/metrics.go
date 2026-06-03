@@ -58,7 +58,7 @@ func NewCollector() *Collector {
 		admissionTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "riftrelay_admission_total",
 			Help: "Total number of admission control decisions",
-		}, []string{"outcome", "region", "endpoint", "priority"}),
+		}, []string{"outcome", "region", "endpoint", "priority", "budget_id"}),
 		queueDepth: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "riftrelay_queue_depth",
 			Help: "Current queue depth per bucket and priority",
@@ -76,7 +76,7 @@ func NewCollector() *Collector {
 			Name:    "riftrelay_queue_wait_seconds",
 			Help:    "Time spent waiting in admission queue",
 			Buckets: []float64{.001, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 30, 60, 120, 300},
-		}, []string{"bucket", "priority"}),
+		}, []string{"bucket", "priority", "budget_id"}),
 		upstreamDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "riftrelay_upstream_duration_seconds",
 			Help:    "Upstream request duration in seconds",
@@ -138,14 +138,14 @@ func (c *Collector) ObserveQueueDepth(bucket string, priority limiter.Priority, 
 	c.queueDepth.WithLabelValues(bucket, priority.String()).Set(float64(depth))
 }
 
-// ObserveQueueWait records the time spent waiting for admission with bucket and priority labels.
-func (c *Collector) ObserveQueueWait(bucket string, priority limiter.Priority, wait time.Duration) {
-	c.queueWaitSeconds.WithLabelValues(bucket, priority.String()).Observe(wait.Seconds())
+// ObserveQueueWait records the time spent waiting for admission.
+func (c *Collector) ObserveQueueWait(bucket string, priority limiter.Priority, budgetID string, wait time.Duration) {
+	c.queueWaitSeconds.WithLabelValues(bucket, priority.String(), budgetID).Observe(wait.Seconds())
 }
 
 // ObserveAdmissionResult records the outcome of an admission decision.
-func (c *Collector) ObserveAdmissionResult(outcome, region, bucket, priority string) {
-	c.admissionTotal.WithLabelValues(outcome, region, endpointFromBucket(bucket), priority).Inc()
+func (c *Collector) ObserveAdmissionResult(outcome, region, bucket, priority string, budgetID string) {
+	c.admissionTotal.WithLabelValues(outcome, region, endpointFromBucket(bucket), priority, budgetID).Inc()
 }
 
 // ObserveUpstream records upstream response metrics.

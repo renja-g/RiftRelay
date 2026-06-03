@@ -81,7 +81,7 @@ func (h *Handler) serveOpenAPISpec(w http.ResponseWriter, r *http.Request) {
 
 	rewriteServers(doc, r)
 	stripSecurity(doc)
-	addPriorityHeaderParameter(doc)
+	addProxyHeaderParameters(doc)
 	simplifyInfoDescription(doc)
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -153,7 +153,12 @@ func stripSecurity(doc map[string]any) {
 	}
 }
 
-func addPriorityHeaderParameter(doc map[string]any) {
+func addProxyHeaderParameters(doc map[string]any) {
+	addHeaderParameter(doc, priorityHeaderName, newPriorityHeaderParameter)
+	addHeaderParameter(doc, rateBudgetHeaderName, newRateBudgetHeaderParameter)
+}
+
+func addHeaderParameter(doc map[string]any, headerName string, newParameter func() map[string]any) {
 	paths, ok := doc["paths"].(map[string]any)
 	if !ok {
 		return
@@ -166,7 +171,7 @@ func addPriorityHeaderParameter(doc map[string]any) {
 		}
 
 		pathLevelParameters := parametersSlice(pathItem["parameters"])
-		pathHasPriority := hasPriorityHeaderParameter(pathLevelParameters)
+		pathHasHeader := hasHeaderParameter(pathLevelParameters, headerName)
 
 		for _, method := range httpMethods {
 			rawOperation, ok := pathItem[method]
@@ -179,11 +184,11 @@ func addPriorityHeaderParameter(doc map[string]any) {
 			}
 
 			operationParameters := parametersSlice(operation["parameters"])
-			if pathHasPriority || hasPriorityHeaderParameter(operationParameters) {
+			if pathHasHeader || hasHeaderParameter(operationParameters, headerName) {
 				continue
 			}
 
-			operationParameters = append(operationParameters, newPriorityHeaderParameter())
+			operationParameters = append(operationParameters, newParameter())
 			operation["parameters"] = operationParameters
 		}
 	}
@@ -197,7 +202,7 @@ func parametersSlice(raw any) []any {
 	return parameters
 }
 
-func hasPriorityHeaderParameter(parameters []any) bool {
+func hasHeaderParameter(parameters []any, headerName string) bool {
 	for _, rawParameter := range parameters {
 		parameter, ok := rawParameter.(map[string]any)
 		if !ok {
@@ -206,7 +211,7 @@ func hasPriorityHeaderParameter(parameters []any) bool {
 
 		name, _ := parameter["name"].(string)
 		location, _ := parameter["in"].(string)
-		if strings.EqualFold(name, priorityHeaderName) && strings.EqualFold(location, "header") {
+		if strings.EqualFold(name, headerName) && strings.EqualFold(location, "header") {
 			return true
 		}
 	}
@@ -222,6 +227,18 @@ func newPriorityHeaderParameter() map[string]any {
 		"schema": map[string]any{
 			"type": "string",
 			"enum": []any{"high"},
+		},
+	}
+}
+
+func newRateBudgetHeaderParameter() map[string]any {
+	return map[string]any{
+		"name":        rateBudgetHeaderName,
+		"in":          "header",
+		"description": "Optional configured rate budget id, such as worker.",
+		"required":    false,
+		"schema": map[string]any{
+			"type": "string",
 		},
 	}
 }
@@ -286,7 +303,10 @@ func requestScheme(r *http.Request) string {
 	return "http"
 }
 
-const priorityHeaderName = "X-Priority"
+const (
+	priorityHeaderName   = "X-Priority"
+	rateBudgetHeaderName = "X-Rate-Budget"
+)
 
 var httpMethods = []string{
 	"get",
