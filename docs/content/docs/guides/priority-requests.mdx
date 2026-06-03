@@ -13,6 +13,8 @@ curl -H "X-Priority: high" \
 
 Without the header, requests use normal priority and are paced evenly across the remaining rate-limit window. **High-priority requests run as soon as a slot is available** — they skip the pacing spread but still respect Riot's app and method limits. This is a scheduling hint, not a rate-limit bypass.
 
+If the request also has `X-Rate-Budget`, `high` skips that budget's pacing delay too. The shared Riot hard limits still apply.
+
 RiftRelay only recognizes `high`. Any other value (or no header) means normal priority.
 
 ## When to use it
@@ -23,4 +25,4 @@ If you have metrics enabled, keep an eye on queue depth and rejection rates. A s
 
 ## Swagger UI
 
-When Swagger is enabled, the OpenAPI spec includes `X-Priority` as a parameter so you can test priority behavior from the browser.
+When Swagger is enabled, the OpenAPI spec includes `X-Priority` and `X-Rate-Budget` as parameters so you can test behavior from the browser.

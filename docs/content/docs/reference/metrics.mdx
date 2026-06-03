@@ -28,7 +28,7 @@ Requests currently being processed. Labels: `region`, `endpoint`, `priority`.
 
 ### `riftrelay_admission_total` (counter)
 
-Admission outcomes. Labels: `outcome`, `region`, `endpoint`, `priority`.
+Admission outcomes. Labels: `outcome`, `region`, `endpoint`, `priority`, `budget_id`.
 
 Outcome values include `allowed`, `rejected_queue_full`, `rejected_timeout`, `shutting_down`, and generic `rejected`.
 
@@ -38,7 +38,7 @@ Current queue depth. Labels: `bucket`, `priority`. If this keeps climbing and do
 
 ### `riftrelay_queue_wait_seconds` (histogram)
 
-Time requests spend waiting in the admission queue. This is usually the most useful metric for spotting rate-limit pressure — if wait times are climbing, you're hitting capacity.
+Time requests spend waiting in the admission queue. Labels: `bucket`, `priority`, `budget_id`. This is usually the most useful metric for spotting rate-limit pressure — if wait times are climbing, you're hitting capacity.
 
 ### `riftrelay_upstream_responses_total` (counter)
 
@@ -64,6 +64,7 @@ Standard `go_*` and `process_*` collectors are registered.
 | `endpoint` | normalized Riot API route pattern | requests, admission, upstream |
 | `bucket` | limiter bucket key | queue depth, queue wait |
 | `priority` | `normal`, `high` | all |
+| `budget_id` | `default` or a configured budget ID | admission, queue wait |
 | `outcome` | `allowed`, `rejected_*`, `shutting_down` | admission |
 | `code` | HTTP status code | upstream responses |
 

@@ -30,7 +30,7 @@ Standard Go pprof index plus `profile`, `trace`, `cmdline`, and `symbol`. See [p
 
 ## `GET /swagger/`
 
-RiftRelay fetches the Riot OpenAPI spec, rewrites the server URL to point at your instance, strips upstream auth, and adds `X-Priority` as a parameter. Useful for poking at the API through your proxy without writing curl commands.
+RiftRelay fetches the Riot OpenAPI spec, rewrites the server URL to point at your instance, strips upstream auth, and adds `X-Priority` and `X-Rate-Budget` as parameters. Useful for poking at the API through your proxy without writing curl commands.
 
 ## `/{region}/{riot-api-path}`
 
@@ -50,7 +50,7 @@ Paths are matched to known Riot API route patterns for bucketing — `/lol/match
 | Route type | Status | Meaning |
 | --- | --- | --- |
 | Health | `204` | Healthy |
-| Invalid proxy path | `400` | Malformed path (missing region, missing path, bad region) |
+| Invalid proxy path or header | `400` | Malformed path, bad token index, or unknown `X-Rate-Budget` |
 | Admission rejection | `429` | Queue full or admission timeout; `Retry-After` included when applicable |
 | Upstream timeout | `408` | Upstream call exceeded timeout budget |
 | Client disconnect | `499` | Client hung up before upstream responded |

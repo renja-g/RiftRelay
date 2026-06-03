@@ -19,6 +19,8 @@ RiftRelay is configured entirely through environment variables. The only require
 | `ENABLE_PPROF` | No | `false` | Expose `/debug/pprof/` |
 | `ENABLE_SWAGGER` | No | `true` | Expose `/swagger/` |
 | `DEFAULT_APP_RATE_LIMIT` | No | `20:1,100:120` | Fallback app rate limit before Riot sends live headers |
+| `RATE_BUDGET_<id>` | No | unset | Pace `X-Rate-Budget: <id>` at this share of the full limit |
+| `RATE_BUDGET_<id>_OVERRIDES` | No | unset | Optional `bucket=share,bucket=share` overrides for that budget |
 
 ## Duration syntax
 
@@ -34,9 +36,22 @@ Comma-separated `limit:window` pairs. Both values are positive integers — limi
 
 That means 20 requests per 1 second and 100 requests per 120 seconds. This is only used before the first upstream response provides real Riot headers.
 
+## Rate budget format
+
+Configure budget IDs on the server:
+
+```text
+RATE_BUDGET_worker=0.8
+RATE_BUDGET_worker_OVERRIDES=lol/match/v5/matches/{matchId}=0.6
+```
+
+Shares must be `> 0` and `<= 1`. A request with `X-Rate-Budget: worker` is paced as if the Riot limit were `share × full_limit`; other traffic does not reduce that target. Optional overrides go in the value so they are shell-safe, and match either the exact limiter bucket (`europe:lol/...`) or the endpoint suffix after the region (`lol/...`).
+
+Unknown budget IDs return `400 Bad Request`. Omit `X-Rate-Budget` for default full-limit pacing.
+
 ## `ENABLE_SWAGGER` details
 
-The Swagger handler fetches the Riot OpenAPI schema, rewrites the server URL to point at your RiftRelay instance, strips upstream auth config, and adds `X-Priority` as a parameter. Handy for local testing; disable it in hardened environments if you don't need it.
+The Swagger handler fetches the Riot OpenAPI schema, rewrites the server URL to point at your RiftRelay instance, strips upstream auth config, and adds `X-Priority` and `X-Rate-Budget` as parameters. Handy for local testing; disable it in hardened environments if you don't need it.
 
 ## Validation
 
@@ -47,6 +62,7 @@ RiftRelay validates everything at startup and fails fast if:
 - a duration can't be parsed
 - `PORT` is out of range
 - `DEFAULT_APP_RATE_LIMIT` is malformed
+- a `RATE_BUDGET_*` share is outside `0 < share <= 1`
 
 ## Internal HTTP server timeouts
 
