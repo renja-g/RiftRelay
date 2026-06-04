@@ -123,3 +123,13 @@ Benchmarks:
 ```bash
 go test -run '^$' -bench . -benchmem ./internal/limiter ./internal/proxy
 ```
+
+End-to-end throughput benchmarks (mock upstream with `1000000:10` app/method limits, default pacing/spreading):
+
+```bash
+# Sustained load with summary logs (~12s per test)
+go test ./internal/bench -run 'TestThroughput' -count=1 -v
+
+# Benchmark metrics (ok_rps, req_rps, reject_rps); default benchtime runs once per case
+go test ./internal/bench -run '^$' -bench 'Throughput' -benchtime=1x -count=3 -v
+```
