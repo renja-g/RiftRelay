@@ -145,4 +145,66 @@ func TestRateStateConsumeAndApply(t *testing.T) {
 			t.Fatal("default lastGranted is set, want only worker pacing updated")
 		}
 	})
+
+	t.Run("active local window ignores count from differently aligned upstream window", func(t *testing.T) {
+		t.Parallel()
+
+		additionalWindow := 150 * time.Millisecond
+		state := rateState{}
+		state.apply(
+			[]parsedWindow{{limit: 1500, count: 1, window: 10 * time.Second}},
+			nil,
+			false,
+			now,
+			additionalWindow,
+		)
+
+		resetAt := now.Add(10*time.Second + additionalWindow)
+		nowAfterReset := resetAt.Add(time.Millisecond)
+		if !state.consume(nowAfterReset, "") {
+			t.Fatal("consume() after local reset = false, want true")
+		}
+
+		state.apply(
+			[]parsedWindow{{limit: 1500, count: 23, window: 10 * time.Second}},
+			nil,
+			false,
+			nowAfterReset,
+			additionalWindow,
+		)
+
+		if got, want := state.windows[0].used, 1; got != want {
+			t.Fatalf("used after apply = %d, want locally consumed %d", got, want)
+		}
+	})
+
+	t.Run("observation rolls expired window without importing upstream count", func(t *testing.T) {
+		t.Parallel()
+
+		additionalWindow := 150 * time.Millisecond
+		state := rateState{}
+		state.apply(
+			[]parsedWindow{{limit: 1500, count: 1, window: 10 * time.Second}},
+			nil,
+			false,
+			now,
+			additionalWindow,
+		)
+
+		nowAfterReset := now.Add(10*time.Second + additionalWindow + time.Millisecond)
+		state.apply(
+			[]parsedWindow{{limit: 1500, count: 23, window: 10 * time.Second}},
+			nil,
+			false,
+			nowAfterReset,
+			additionalWindow,
+		)
+
+		if got := state.windows[0].used; got != 0 {
+			t.Fatalf("used after rollover = %d, want 0", got)
+		}
+		if !state.windows[0].locallyReset {
+			t.Fatal("locallyReset after rollover = false, want true")
+		}
+	})
 }
