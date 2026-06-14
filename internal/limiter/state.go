@@ -8,10 +8,17 @@ import (
 const defaultBudgetID = "default"
 
 type limitWindow struct {
-	limit   int
-	used    int
-	window  time.Duration
-	resetAt time.Time
+	limit        int
+	used         int
+	window       time.Duration
+	resetAt      time.Time
+	locallyReset bool
+}
+
+func (w *limitWindow) rollover(now time.Time) {
+	w.used = 0
+	w.resetAt = now.Add(w.window)
+	w.locallyReset = true
 }
 
 type rateState struct {
@@ -46,8 +53,7 @@ func (s *rateState) nextAllowed(now time.Time, budgetID string, share float64, b
 	for i := range s.windows {
 		w := &s.windows[i]
 		if !w.resetAt.After(now) {
-			w.used = 0
-			w.resetAt = now.Add(w.window)
+			w.rollover(now)
 		}
 		if w.used >= w.limit && w.resetAt.After(next) {
 			next = w.resetAt
@@ -90,8 +96,7 @@ func (s *rateState) consume(now time.Time, budgetID string) bool {
 	for i := range s.windows {
 		w := &s.windows[i]
 		if !w.resetAt.After(now) {
-			w.used = 0
-			w.resetAt = now.Add(w.window)
+			w.rollover(now)
 		}
 		if w.used >= w.limit {
 			return false
@@ -142,11 +147,17 @@ func (s *rateState) apply(
 				seenCount = true
 			}
 
-			if old, ok := existing[next.window]; ok && old.resetAt.After(now) {
-				if old.used > next.used {
-					next.used = old.used
+			if old, ok := existing[next.window]; ok {
+				if !old.resetAt.After(now) {
+					next.rollover(now)
+				} else {
+					// After a local rollover, upstream counts belong to a differently aligned window.
+					if old.locallyReset || old.used > next.used {
+						next.used = old.used
+					}
+					next.resetAt = old.resetAt
+					next.locallyReset = old.locallyReset
 				}
-				next.resetAt = old.resetAt
 			}
 
 			updated = append(updated, next)
@@ -253,7 +264,7 @@ func (k *keyState) app(region string, now time.Time, additionalWindow time.Durat
 	return state
 }
 
-func (k *keyState) method(bucket string, now time.Time, additionalWindow time.Duration) *rateState {
+func (k *keyState) method(bucket string) *rateState {
 	state, ok := k.methodByBucket[bucket]
 	if ok {
 		return state

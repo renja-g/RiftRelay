@@ -122,9 +122,9 @@ func (l *Limiter) loop() {
 		case req := <-l.admitCh:
 			l.handleAdmit(req, keys, buckets, regionIndex, &wakeups)
 		case obs := <-l.observeCh:
-			l.handleObservation(obs, keys, buckets, regionIndex, &wakeups)
+			l.handleObservation(obs, keys, regionIndex, &wakeups)
 			// Drain all pending observations before re-entering select.
-			l.drainObservations(keys, buckets, regionIndex, &wakeups)
+			l.drainObservations(keys, regionIndex, &wakeups)
 		case <-timer.C:
 			now := l.cfg.Clock.Now()
 			for len(wakeups) > 0 {
@@ -198,7 +198,6 @@ func (l *Limiter) handleAdmit(
 func (l *Limiter) handleObservation(
 	obs Observation,
 	keys []keyState,
-	buckets map[string]*bucketQueue,
 	regionIndex map[string][]*bucketQueue,
 	wakeups *wakeHeap,
 ) {
@@ -226,7 +225,7 @@ func (l *Limiter) handleObservation(
 	methodLimits := parseRateHeader(obs.Header.Get("X-Method-Rate-Limit"), obs.Header.Get("X-Method-Rate-Limit-Count"))
 
 	key.app(obs.Region, now, l.cfg.AdditionalWindow).apply(appLimits, retryAfter, applyAppRetry, now, l.cfg.AdditionalWindow)
-	key.method(obs.Bucket, now, l.cfg.AdditionalWindow).apply(methodLimits, retryAfter, applyMethodRetry, now, l.cfg.AdditionalWindow)
+	key.method(obs.Bucket).apply(methodLimits, retryAfter, applyMethodRetry, now, l.cfg.AdditionalWindow)
 
 	// An app-limit update can unblock or block multiple buckets in the same region.
 	for _, bucket := range regionIndex[obs.Region] {
@@ -236,14 +235,13 @@ func (l *Limiter) handleObservation(
 
 func (l *Limiter) drainObservations(
 	keys []keyState,
-	buckets map[string]*bucketQueue,
 	regionIndex map[string][]*bucketQueue,
 	wakeups *wakeHeap,
 ) {
 	for {
 		select {
 		case obs := <-l.observeCh:
-			l.handleObservation(obs, keys, buckets, regionIndex, wakeups)
+			l.handleObservation(obs, keys, regionIndex, wakeups)
 		default:
 			return
 		}
@@ -294,7 +292,7 @@ func (l *Limiter) dispatch(bucket *bucketQueue, keys []keyState, wakeups *wakeHe
 		} else {
 			key := &keys[keyIndex]
 			if !key.app(bucket.region, now, l.cfg.AdditionalWindow).consume(now, req.admission.BudgetID) ||
-				!key.method(bucket.bucket, now, l.cfg.AdditionalWindow).consume(now, req.admission.BudgetID) {
+				!key.method(bucket.bucket).consume(now, req.admission.BudgetID) {
 				cannotServe = true
 				wakeAt = now.Add(5 * time.Millisecond)
 			}
@@ -352,7 +350,7 @@ func (l *Limiter) pickKey(
 
 		key := &keys[i]
 		appAt := key.app(region, now, l.cfg.AdditionalWindow).nextAllowed(now, budgetID, budgetShare, bypassPacing)
-		methodAt := key.method(bucket, now, l.cfg.AdditionalWindow).nextAllowed(now, budgetID, budgetShare, bypassPacing)
+		methodAt := key.method(bucket).nextAllowed(now, budgetID, budgetShare, bypassPacing)
 		readyAt := appAt
 		if methodAt.After(readyAt) {
 			readyAt = methodAt
