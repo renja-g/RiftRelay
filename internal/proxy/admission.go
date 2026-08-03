@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"strconv"
@@ -13,12 +14,22 @@ import (
 	"github.com/renja-g/RiftRelay/internal/router"
 )
 
+type authMode uint8
+
+const (
+	authModeAPIKey authMode = iota
+	authModeBearer
+)
+
+var errInvalidAuthorization = errors.New("invalid Authorization header: expected a Bearer token")
+
 type admissionContext struct {
 	Region    string
 	Bucket    string
 	BudgetID  string
 	KeyIndex  int
 	Priority  string
+	AuthMode  authMode
 	StartedAt time.Time
 }
 
@@ -37,6 +48,7 @@ func admissionMiddleware(
 	l *limiter.Limiter,
 	m *metrics.Collector,
 	timeout time.Duration,
+	automaticTokenCount int,
 ) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -57,6 +69,12 @@ func admissionMiddleware(
 			}
 			budgetLabel := admissionBudgetLabel(budgetID)
 
+			authMode, err := authModeFromHeader(r.Header)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+
 			var tokenIndex *int
 			if val := r.Header.Get("X-Riot-Token-Index"); val != "" {
 				parsed, err := strconv.Atoi(val)
@@ -69,6 +87,10 @@ func admissionMiddleware(
 					return
 				}
 				tokenIndex = &parsed
+			}
+			if authMode == authModeBearer && (tokenIndex == nil || *tokenIndex < automaticTokenCount) {
+				http.Error(w, "bearer requests require a pinned X-Riot-Token-Index", http.StatusBadRequest)
+				return
 			}
 
 			admitCtx := r.Context()
@@ -131,18 +153,37 @@ func admissionMiddleware(
 				m.ObserveAdmissionResult("allowed", info.Region, info.Bucket, priority.String(), budgetLabel)
 			}
 
-			ctx := withKeyIndex(r.Context(), ticket.KeyIndex)
-			ctx = withAdmission(ctx, admissionContext{
+			ctx := withAdmission(r.Context(), admissionContext{
 				Region:    info.Region,
 				Bucket:    info.Bucket,
 				BudgetID:  budgetLabel,
 				KeyIndex:  ticket.KeyIndex,
 				Priority:  priority.String(),
+				AuthMode:  authMode,
 				StartedAt: time.Now(), // Captured after admission so upstream_duration excludes queue wait
 			})
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+func authModeFromHeader(header http.Header) (authMode, error) {
+	values := header.Values("Authorization")
+	if len(values) == 0 {
+		return authModeAPIKey, nil
+	}
+	if len(values) != 1 {
+		return authModeAPIKey, errInvalidAuthorization
+	}
+
+	value := strings.TrimSpace(values[0])
+	scheme, credentials, ok := strings.Cut(value, " ")
+	credentials = strings.TrimSpace(credentials)
+	if !ok || !strings.EqualFold(scheme, "Bearer") || credentials == "" || strings.ContainsAny(credentials, " \t\r\n") {
+		return authModeAPIKey, errInvalidAuthorization
+	}
+
+	return authModeBearer, nil
 }
 
 func admissionBudgetLabel(budgetID string) string {

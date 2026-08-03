@@ -58,6 +58,18 @@ To force a request to use a specific API token, use the `X-Riot-Token-Index` hea
 curl -H "X-Riot-Token-Index: 0" "http://localhost:8985/europe/riot/account/v1/accounts/by-riot-id/Someone/EUW1"
 ```
 
+Bearer-authenticated RSO requests must select a pinned index so their rate-limit state stays separate from normal API keys. RiftRelay forwards the `Authorization` header and does not add `X-Riot-Token`:
+
+```bash
+RIOT_TOKEN=api-key
+RIOT_PINNED_TOKEN=rso-rate-limit-slot
+
+curl \
+  -H "Authorization: Bearer $RSO_ACCESS_TOKEN" \
+  -H "X-Riot-Token-Index: 1" \
+  "http://localhost:8985/europe/riot/account/v1/accounts/me"
+```
+
 You can also explore and send API requests through the Swagger UI at `http://localhost:8985/swagger/` (enabled by default).
 
 <img width="1440" height="783" alt="image" src="https://github.com/user-attachments/assets/4dc41b61-1cc7-419e-80c6-0c93cf213f0d" />
@@ -76,7 +88,7 @@ Use `RIOT_PINNED_TOKEN` for tokens that must never be selected automatically. Th
 
 ```bash
 RIOT_TOKEN=token1,token2
-RIOT_PINNED_TOKEN=rso-token
+RIOT_PINNED_TOKEN=rso-rate-limit-slot
 ```
 
 Supported environment variables:

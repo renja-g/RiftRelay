@@ -33,10 +33,10 @@ Tokens use stable 0-based indexing within the configured lists. All `RIOT_TOKEN`
 
 ```text
 RIOT_TOKEN=token-a,token-b
-RIOT_PINNED_TOKEN=rso-token
+RIOT_PINNED_TOKEN=rso-rate-limit-slot
 ```
 
-Here, `token-a`, `token-b`, and `rso-token` have indices `0`, `1`, and `2`. Requests without `X-Riot-Token-Index` use only indices `0` and `1`. Send `X-Riot-Token-Index: 2` to use `rso-token` explicitly. Pinned tokens have independent rate-limit state and still follow the normal admission and pacing rules.
+Here, `token-a`, `token-b`, and `rso-rate-limit-slot` have indices `0`, `1`, and `2`. Requests without `X-Riot-Token-Index` use only indices `0` and `1`. For an API-key request, `X-Riot-Token-Index: 2` injects the configured pinned value. For a Bearer request, the same index identifies independent rate-limit state and the configured value is not forwarded. Pinned indices still follow the normal admission and pacing rules.
 
 ## `DEFAULT_APP_RATE_LIMIT` format
 
