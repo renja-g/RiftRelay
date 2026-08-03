@@ -12,7 +12,7 @@ Every proxied request uses this path shape:
 /{region}/{riot-api-path}
 ```
 
-The first segment is the Riot routing region or platform prefix. Everything after it is forwarded as-is.
+The first segment must be a known Riot routing region or platform prefix. Everything after it must match a route in RiftRelay's generated Riot API route registry; unknown hosts and paths return `400` so they cannot bypass method bucketing.
 
 ```sh
 curl "http://localhost:8985/europe/riot/account/v1/accounts/by-riot-id/Someone/EUW1"

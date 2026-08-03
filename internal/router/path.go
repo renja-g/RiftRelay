@@ -48,6 +48,9 @@ func ParsePath(rawPath string) (PathInfo, error) {
 	if region == "" || !regionPattern.MatchString(region) {
 		return PathInfo{}, fmt.Errorf("invalid region")
 	}
+	if !validRiotRoutingValue(region) {
+		return PathInfo{}, fmt.Errorf("unknown Riot routing value %q", region)
+	}
 
 	upstreamPath := path.Clean("/" + strings.TrimSpace(parts[1]))
 	if upstreamPath == "/" {
@@ -55,16 +58,27 @@ func ParsePath(rawPath string) (PathInfo, error) {
 	}
 
 	pattern := matchPathPattern(upstreamPath)
-	bucketPath := upstreamPath
-	if pattern != "" {
-		bucketPath = pattern
+	if pattern == "" {
+		return PathInfo{}, fmt.Errorf("unknown Riot API path")
 	}
 
 	return PathInfo{
 		Region:       region,
 		UpstreamPath: upstreamPath,
-		Bucket:       region + ":" + strings.TrimPrefix(bucketPath, "/"),
+		Bucket:       region + ":" + strings.TrimPrefix(pattern, "/"),
 	}, nil
+}
+
+func validRiotRoutingValue(value string) bool {
+	switch value {
+	case "americas", "asia", "europe",
+		"br1", "eun1", "euw1", "jp1", "kr", "la1", "la2", "me1", "na1", "oc1", "ru", "sg2", "tr1", "tw2", "vn2",
+		"pbe1", "sea", "apac", "esports", "esportseu",
+		"ap", "br", "eu", "latam", "na":
+		return true
+	default:
+		return false
+	}
 }
 
 func ensurePathPatternRoot() {

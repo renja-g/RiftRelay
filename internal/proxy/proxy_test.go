@@ -5,8 +5,12 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
+	"time"
 
+	"github.com/renja-g/RiftRelay/internal/limiter"
 	"github.com/renja-g/RiftRelay/internal/testutil"
 )
 
@@ -97,4 +101,65 @@ func TestProxyNewMapsTransportErrors(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestProxyRetryUpdatesLimiterBeforeWaiting(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		l, err := limiter.New(limiter.Config{
+			KeyCount:         1,
+			QueueCapacity:    2,
+			DefaultAppLimits: "20:1",
+		})
+		if err != nil {
+			t.Fatalf("limiter.New() error = %v", err)
+		}
+		defer func() { _ = l.Close() }()
+
+		var attempts atomic.Int32
+		cfg := testutil.DummyConfig()
+		cfg.UpstreamTimeout = 0
+		handler := New(cfg, WithLimiter(l), WithBaseTransport(testutil.RoundTripperFunc(func(*http.Request) (*http.Response, error) {
+			if attempts.Add(1) == 1 {
+				return testutil.HTTPResponse(http.StatusTooManyRequests, "", http.Header{
+					"Retry-After":       []string{"1"},
+					"X-Rate-Limit-Type": []string{"application"},
+				}), nil
+			}
+			return testutil.HTTPResponse(http.StatusNoContent, "", nil), nil
+		})))
+
+		firstDone := make(chan *httptest.ResponseRecorder, 1)
+		go func() {
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/europe/riot/account/v1/accounts/me", nil))
+			firstDone <- recorder
+		}()
+		synctest.Wait()
+
+		secondDone := make(chan *httptest.ResponseRecorder, 1)
+		go func() {
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/europe/riot/account/v1/accounts/me", nil))
+			secondDone <- recorder
+		}()
+		synctest.Wait()
+
+		if got, want := attempts.Load(), int32(1); got != want {
+			t.Fatalf("upstream attempts during Retry-After = %d, want %d", got, want)
+		}
+		select {
+		case recorder := <-secondDone:
+			t.Fatalf("second request completed before Retry-After with status %d", recorder.Code)
+		default:
+		}
+
+		time.Sleep(time.Second)
+		synctest.Wait()
+		for i, done := range []<-chan *httptest.ResponseRecorder{firstDone, secondDone} {
+			recorder := <-done
+			if got, want := recorder.Code, http.StatusNoContent; got != want {
+				t.Errorf("request %d status = %d, want %d", i+1, got, want)
+			}
+		}
+	})
 }

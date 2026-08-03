@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	appRateLimitHeader   = "1000000:10"
+	appRateLimitHeader    = "1000000:10"
 	methodRateLimitHeader = "1000000:10"
-	rateWindowSeconds    = 10
+	rateWindowSeconds     = 10
 )
 
 // MockUpstream simulates Riot rate-limit headers for throughput benchmarks.

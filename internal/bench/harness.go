@@ -22,10 +22,10 @@ const (
 	// AppRateLimitAssumption is the Riot app limit used for throughput benchmarks.
 	AppRateLimitAssumption = appRateLimitHeader
 
-	defaultBenchWarmup    = 2 * time.Second
-	defaultBenchDuration  = 10 * time.Second
-	defaultParallelism    = 128
-	workersPerPlatform    = 8
+	defaultBenchWarmup   = 2 * time.Second
+	defaultBenchDuration = 10 * time.Second
+	defaultParallelism   = 128
+	workersPerPlatform   = 8
 )
 
 // LoLPlatformRoutingHosts are platform routing values; each has its own app rate limit.
@@ -59,11 +59,11 @@ func (r LoadResult) TotalRPS() float64 {
 }
 
 type loadConfig struct {
-	path       func(workerID int) string
-	warmup     time.Duration
-	duration   time.Duration
-	parallel   int
-	inFlight   int
+	path     func(workerID int) string
+	warmup   time.Duration
+	duration time.Duration
+	parallel int
+	inFlight int
 }
 
 func benchConfig() config.Config {

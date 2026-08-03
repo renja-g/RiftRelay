@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"testing"
 	"testing/synctest"
@@ -31,6 +32,37 @@ func TestWithRequestTimeout(t *testing.T) {
 		t.Fatalf("RoundTrip() error = %v", err)
 	}
 	_ = resp.Body.Close()
+}
+
+func TestWithRequestTimeoutKeepsContextAliveUntilBodyClose(t *testing.T) {
+	t.Parallel()
+
+	var requestContext context.Context
+	rt := WithRequestTimeout(testutil.RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		requestContext = r.Context()
+		return testutil.HTTPResponse(http.StatusOK, "payload", nil), nil
+	}), time.Second)
+
+	resp, err := rt.RoundTrip(httptestRequest(t))
+	if err != nil {
+		t.Fatalf("RoundTrip() error = %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("ReadAll(response body) error = %v", err)
+	}
+	if got, want := string(body), "payload"; got != want {
+		t.Fatalf("response body = %q, want %q", got, want)
+	}
+	if err := requestContext.Err(); err != nil {
+		t.Fatalf("request context before Body.Close() error = %v, want nil", err)
+	}
+	if err := resp.Body.Close(); err != nil {
+		t.Fatalf("Body.Close() error = %v", err)
+	}
+	if got, want := requestContext.Err(), context.Canceled; got != want {
+		t.Fatalf("request context after Body.Close() error = %v, want %v", got, want)
+	}
 }
 
 func TestWithRetryAfter429(t *testing.T) {
@@ -94,6 +126,43 @@ func TestWithRetryAfter429(t *testing.T) {
 				t.Fatalf("RoundTrip() error = %v, want %v", err, context.Canceled)
 			}
 		})
+	})
+
+	t.Run("notifies observer before retry", func(t *testing.T) {
+		t.Parallel()
+
+		attempts := 0
+		observed := 0
+		rt := WithRetryAfter429(testutil.RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			attempts++
+			if attempts == 1 {
+				return testutil.HTTPResponse(http.StatusTooManyRequests, "", http.Header{
+					"Retry-After": []string{"0"},
+				}), nil
+			}
+			return testutil.HTTPResponse(http.StatusNoContent, "", nil), nil
+		}), 1, func(req *http.Request, resp *http.Response) {
+			if got, want := req.URL.String(), "https://example.invalid/test"; got != want {
+				t.Errorf("observer request URL = %q, want %q", got, want)
+			}
+			if got, want := resp.StatusCode, http.StatusTooManyRequests; got != want {
+				t.Errorf("observer status = %d, want %d", got, want)
+			}
+			observed++
+		})
+
+		resp, err := rt.RoundTrip(httptestRequest(t))
+		if err != nil {
+			t.Fatalf("RoundTrip() error = %v", err)
+		}
+		defer resp.Body.Close()
+
+		if got, want := attempts, 2; got != want {
+			t.Errorf("attempts = %d, want %d", got, want)
+		}
+		if got, want := observed, 1; got != want {
+			t.Errorf("observer calls = %d, want %d", got, want)
+		}
 	})
 }
 

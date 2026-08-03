@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/renja-g/RiftRelay/internal/httputil"
@@ -48,12 +49,28 @@ func WithRequestTimeout(base http.RoundTripper, timeout time.Duration) http.Roun
 	}
 	return roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		ctx, cancel := context.WithTimeout(r.Context(), timeout)
-		defer cancel()
-		return base.RoundTrip(r.Clone(ctx))
+		resp, err := base.RoundTrip(r.Clone(ctx))
+		if err != nil {
+			cancel()
+			return nil, err
+		}
+		if resp.Body == nil {
+			cancel()
+			return resp, nil
+		}
+
+		resp.Body = &cancelOnCloseBody{
+			ReadCloser: resp.Body,
+			cancel:     cancel,
+		}
+		return resp, nil
 	})
 }
 
-func WithRetryAfter429(base http.RoundTripper, maxRetries int) http.RoundTripper {
+// RetryObserver receives each retryable 429 response before its body is closed.
+type RetryObserver func(*http.Request, *http.Response)
+
+func WithRetryAfter429(base http.RoundTripper, maxRetries int, observers ...RetryObserver) http.RoundTripper {
 	if maxRetries <= 0 {
 		return base
 	}
@@ -83,6 +100,11 @@ func WithRetryAfter429(base http.RoundTripper, maxRetries int) http.RoundTripper
 			if !ok {
 				return resp, nil
 			}
+			for _, observe := range observers {
+				if observe != nil {
+					observe(req, resp)
+				}
+			}
 
 			if resp.Body != nil {
 				_, _ = io.Copy(io.Discard, resp.Body)
@@ -107,6 +129,17 @@ func WithRetryAfter429(base http.RoundTripper, maxRetries int) http.RoundTripper
 			}
 		}
 	})
+}
+
+type cancelOnCloseBody struct {
+	io.ReadCloser
+	cancel     context.CancelFunc
+	cancelOnce sync.Once
+}
+
+func (b *cancelOnCloseBody) Close() error {
+	b.cancelOnce.Do(b.cancel)
+	return b.ReadCloser.Close()
 }
 
 func canReplayRequestBody(r *http.Request) bool {

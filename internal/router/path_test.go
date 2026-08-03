@@ -25,13 +25,9 @@ func TestParsePath(t *testing.T) {
 			},
 		},
 		{
-			name:    "falls back to concrete upstream path when no pattern matches",
+			name:    "rejects an unknown API path",
 			rawPath: "/na1/custom/endpoint",
-			want: PathInfo{
-				Region:       "na1",
-				UpstreamPath: "/custom/endpoint",
-				Bucket:       "na1:custom/endpoint",
-			},
+			wantErr: true,
 		},
 		{
 			name:    "cleans path traversal segments",
@@ -45,6 +41,7 @@ func TestParsePath(t *testing.T) {
 		{name: "missing region", rawPath: "/", wantErr: true},
 		{name: "missing upstream path", rawPath: "/europe", wantErr: true},
 		{name: "invalid region", rawPath: "/EU West/riot/account/v1/accounts/me", wantErr: true},
+		{name: "unknown routing value", rawPath: "/attacker/riot/account/v1/accounts/me", wantErr: true},
 	}
 
 	for _, tt := range tests {
