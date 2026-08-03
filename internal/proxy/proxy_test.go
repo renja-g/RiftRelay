@@ -50,6 +50,44 @@ func TestProxyNewRewritesRequestAndInjectsToken(t *testing.T) {
 	}
 }
 
+func TestProxyNewInjectsExplicitlySelectedPinnedToken(t *testing.T) {
+	t.Parallel()
+
+	l, err := limiter.New(limiter.Config{
+		KeyCount:          2,
+		AutomaticKeyCount: 1,
+		QueueCapacity:     2,
+		DefaultAppLimits:  "20:1",
+	})
+	if err != nil {
+		t.Fatalf("limiter.New() error = %v", err)
+	}
+	t.Cleanup(func() {
+		_ = l.Close()
+	})
+
+	cfg := testutil.DummyConfig()
+	cfg.Tokens = []string{"automatic-token", "pinned-token"}
+	cfg.AutomaticTokenCount = 1
+	var gotToken string
+	handler := New(cfg, WithLimiter(l), WithBaseTransport(testutil.RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		gotToken = r.Header.Get("X-Riot-Token")
+		return testutil.HTTPResponse(http.StatusNoContent, "", nil), nil
+	})))
+
+	req := httptest.NewRequest(http.MethodGet, "/europe/riot/account/v1/accounts/me", nil)
+	req.Header.Set("X-Riot-Token-Index", "1")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if got, want := rec.Code, http.StatusNoContent; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+	if got, want := gotToken, "pinned-token"; got != want {
+		t.Fatalf("X-Riot-Token = %q, want %q", got, want)
+	}
+}
+
 func TestProxyNewMapsTransportErrors(t *testing.T) {
 	t.Parallel()
 

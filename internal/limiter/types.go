@@ -48,13 +48,14 @@ type MetricsSink interface {
 }
 
 type Config struct {
-	KeyCount         int
-	QueueCapacity    int
-	AdditionalWindow time.Duration
-	Clock            Clock
-	Metrics          MetricsSink
-	DefaultAppLimits string
-	RateBudgets      map[string]BudgetConfig
+	KeyCount          int
+	AutomaticKeyCount int
+	QueueCapacity     int
+	AdditionalWindow  time.Duration
+	Clock             Clock
+	Metrics           MetricsSink
+	DefaultAppLimits  string
+	RateBudgets       map[string]BudgetConfig
 }
 
 type BudgetConfig struct {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"runtime"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -30,6 +31,22 @@ func TestNewValidation(t *testing.T) {
 				QueueCapacity: 0,
 			},
 		},
+		{
+			name: "too many automatic keys",
+			cfg: Config{
+				KeyCount:          1,
+				AutomaticKeyCount: 2,
+				QueueCapacity:     1,
+			},
+		},
+		{
+			name: "negative automatic key count",
+			cfg: Config{
+				KeyCount:          1,
+				AutomaticKeyCount: -1,
+				QueueCapacity:     1,
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -42,6 +59,77 @@ func TestNewValidation(t *testing.T) {
 				_ = l.Close()
 				t.Fatal("New() error = nil, want non-nil")
 			}
+		})
+	}
+}
+
+func TestLimiterPinnedOnlyKeySelection(t *testing.T) {
+	t.Parallel()
+
+	now := time.Unix(1_700_000_000, 0)
+	const (
+		region = "europe"
+		bucket = "europe:riot/account/v1/accounts/me"
+	)
+	l := &Limiter{cfg: Config{AutomaticKeyCount: 1}}
+	keys := []keyState{
+		newKeyState(nil),
+		newKeyState(nil),
+	}
+	keys[0].app(region, now, 0).blockedUntil = now.Add(time.Minute)
+
+	gotIndex, gotReadyAt := l.pickKey(now, keys, region, bucket, PriorityNormal, nil, defaultBudgetID, 1)
+	if got, want := gotIndex, 0; got != want {
+		t.Fatalf("pickKey() unpinned index = %d, want %d", got, want)
+	}
+	if got, want := gotReadyAt, now.Add(time.Minute); !got.Equal(want) {
+		t.Fatalf("pickKey() unpinned ready time = %v, want %v", got, want)
+	}
+
+	pinnedIndex := 1
+	gotIndex, gotReadyAt = l.pickKey(now, keys, region, bucket, PriorityNormal, &pinnedIndex, defaultBudgetID, 1)
+	if got, want := gotIndex, pinnedIndex; got != want {
+		t.Fatalf("pickKey() pinned index = %d, want %d", got, want)
+	}
+	if got, want := gotReadyAt, now; !got.Equal(want) {
+		t.Fatalf("pickKey() pinned ready time = %v, want %v", got, want)
+	}
+}
+
+func BenchmarkLimiterPickKey(b *testing.B) {
+	now := time.Unix(1_700_000_000, 0)
+	const (
+		region = "europe"
+		bucket = "europe:riot/account/v1/accounts/me"
+	)
+	l := &Limiter{cfg: Config{AutomaticKeyCount: 1}}
+	keys := []keyState{
+		newKeyState(nil),
+		newKeyState(nil),
+	}
+	for i := range keys {
+		keys[i].app(region, now, 0)
+		keys[i].method(bucket)
+	}
+	pinnedIndex := 1
+
+	benchmarks := []struct {
+		name       string
+		tokenIndex *int
+	}{
+		{name: "automatic"},
+		{name: "pinned", tokenIndex: &pinnedIndex},
+	}
+	for _, benchmark := range benchmarks {
+		b.Run(benchmark.name, func(b *testing.B) {
+			b.ReportAllocs()
+			var keyIndex int
+			var readyAt time.Time
+			for b.Loop() {
+				keyIndex, readyAt = l.pickKey(now, keys, region, bucket, PriorityNormal, benchmark.tokenIndex, defaultBudgetID, 1)
+			}
+			runtime.KeepAlive(keyIndex)
+			runtime.KeepAlive(readyAt)
 		})
 	}
 }
@@ -331,8 +419,9 @@ func TestLimiterBudgetFIFOInterleave(t *testing.T) {
 	clock := &mutableClock{now: now}
 	l := &Limiter{
 		cfg: Config{
-			AdditionalWindow: 0,
-			Clock:            clock,
+			AutomaticKeyCount: 1,
+			AdditionalWindow:  0,
+			Clock:             clock,
 			RateBudgets: map[string]BudgetConfig{
 				"worker": {Share: 0.8},
 			},

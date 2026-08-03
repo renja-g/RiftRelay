@@ -28,6 +28,12 @@ func New(cfg Config) (*Limiter, error) {
 	if cfg.KeyCount <= 0 {
 		return nil, fmt.Errorf("KeyCount must be > 0")
 	}
+	if cfg.AutomaticKeyCount == 0 {
+		cfg.AutomaticKeyCount = cfg.KeyCount
+	}
+	if cfg.AutomaticKeyCount < 0 || cfg.AutomaticKeyCount > cfg.KeyCount {
+		return nil, fmt.Errorf("AutomaticKeyCount must be between 1 and KeyCount")
+	}
 	if cfg.QueueCapacity <= 0 {
 		return nil, fmt.Errorf("QueueCapacity must be > 0")
 	}
@@ -365,11 +371,13 @@ func (l *Limiter) pickKey(
 	bestAt := time.Time{}
 	bypassPacing := priority == PriorityHigh
 
-	for i := range keys {
-		if forcedTokenIndex != nil && i != *forcedTokenIndex {
-			continue
-		}
+	firstKey, lastKey := 0, l.cfg.AutomaticKeyCount
+	if forcedTokenIndex != nil {
+		firstKey = *forcedTokenIndex
+		lastKey = firstKey + 1
+	}
 
+	for i := firstKey; i < lastKey; i++ {
 		key := &keys[i]
 		appAt := key.app(region, now, l.cfg.AdditionalWindow).nextAllowed(now, budgetID, budgetShare, bypassPacing)
 		methodAt := key.method(bucket).nextAllowed(now, budgetID, budgetShare, bypassPacing)

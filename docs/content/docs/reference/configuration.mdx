@@ -8,7 +8,8 @@ RiftRelay is configured entirely through environment variables. The only require
 
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
-| `RIOT_TOKEN` | Yes | none | Riot API token (comma-separated for multiple tokens) |
+| `RIOT_TOKEN` | Yes | none | Automatically selected Riot API tokens (comma-separated) |
+| `RIOT_PINNED_TOKEN` | No | unset | Explicit-only Riot API tokens (comma-separated) |
 | `PORT` | No | `8985` | HTTP server port (1–65535) |
 | `QUEUE_CAPACITY` | No | `2048` | Max queued requests per bucket before new ones are rejected with `429` |
 | `ADMISSION_TIMEOUT` | No | `5m` | How long a request can wait in the queue |
@@ -25,6 +26,17 @@ RiftRelay is configured entirely through environment variables. The only require
 ## Duration syntax
 
 `ADMISSION_TIMEOUT`, `ADDITIONAL_WINDOW_SIZE`, `SHUTDOWN_TIMEOUT`, and `UPSTREAM_TIMEOUT` use Go duration strings: `150ms`, `2s`, `30s`, `5m`, etc.
+
+## Token ordering and selection
+
+Tokens use stable 0-based indexing within the configured lists. All `RIOT_TOKEN` entries come first, followed by all `RIOT_PINNED_TOKEN` entries, regardless of the order in which the environment variables are declared.
+
+```text
+RIOT_TOKEN=token-a,token-b
+RIOT_PINNED_TOKEN=rso-token
+```
+
+Here, `token-a`, `token-b`, and `rso-token` have indices `0`, `1`, and `2`. Requests without `X-Riot-Token-Index` use only indices `0` and `1`. Send `X-Riot-Token-Index: 2` to use `rso-token` explicitly. Pinned tokens have independent rate-limit state and still follow the normal admission and pacing rules.
 
 ## `DEFAULT_APP_RATE_LIMIT` format
 

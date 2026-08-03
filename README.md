@@ -52,7 +52,7 @@ export RATE_BUDGET_worker=0.8
 curl -H "X-Rate-Budget: worker" "http://localhost:8985/europe/riot/account/v1/accounts/by-riot-id/Someone/EUW1"
 ```
 
-To force a request to use a specific API token from the `RIOT_TOKEN` pool, use the `X-Riot-Token-Index` header (0-indexed). This is useful if you provide multiple tokens using `RIOT_TOKEN=a,b,c` and want to explicitly use a specific one for certain requests:
+To force a request to use a specific API token, use the `X-Riot-Token-Index` header (0-indexed). Tokens in `RIOT_TOKEN` come first, followed by tokens in `RIOT_PINNED_TOKEN`:
 
 ```bash
 curl -H "X-Riot-Token-Index: 0" "http://localhost:8985/europe/riot/account/v1/accounts/by-riot-id/Someone/EUW1"
@@ -72,10 +72,19 @@ Set `RIOT_TOKEN` (required). Multiple tokens are supported as comma separated va
 RIOT_TOKEN=token1,token2,token3
 ```
 
+Use `RIOT_PINNED_TOKEN` for tokens that must never be selected automatically. These tokens are only used by requests with an explicit `X-Riot-Token-Index`. For example, the pinned token below has index `2`:
+
+```bash
+RIOT_TOKEN=token1,token2
+RIOT_PINNED_TOKEN=rso-token
+```
+
 Supported environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `RIOT_TOKEN` | required | Automatically selected Riot API tokens (comma-separated) |
+| `RIOT_PINNED_TOKEN` | unset | Explicit-only Riot API tokens, appended after `RIOT_TOKEN` for 0-based indexing |
 | `PORT` | `8985` | Server port |
 | `QUEUE_CAPACITY` | `2048` | Max queued requests |
 | `ADMISSION_TIMEOUT` | `5m` | Max wait time for admission (how long a request can wait in the queue) |
