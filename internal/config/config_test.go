@@ -24,6 +24,14 @@ func TestLoad(t *testing.T) {
 			assertCfg: assertLoadDefaults,
 		},
 		{
+			name: "pinned tokens follow automatic tokens",
+			env: map[string]string{
+				"RIOT_TOKEN":        "token-a, token-b",
+				"RIOT_PINNED_TOKEN": "token-rso, token-special",
+			},
+			assertCfg: assertLoadPinnedTokens,
+		},
+		{
 			name: "custom values",
 			env: map[string]string{
 				"RIOT_TOKEN":             "token-a",
@@ -104,6 +112,7 @@ func clearConfigEnv(t *testing.T) {
 	t.Helper()
 	for _, key := range []string{
 		"RIOT_TOKEN",
+		"RIOT_PINNED_TOKEN",
 		"PORT",
 		"QUEUE_CAPACITY",
 		"ADMISSION_TIMEOUT",
@@ -142,6 +151,9 @@ func assertLoadDefaults(t *testing.T, cfg Config) {
 	if got, want := cfg.Tokens, []string{"token-a", "token-b"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("Tokens = %v, want %v", got, want)
 	}
+	if got, want := cfg.AutomaticTokenCount, 2; got != want {
+		t.Fatalf("AutomaticTokenCount = %d, want %d", got, want)
+	}
 	if got, want := cfg.Port, defaultPort; got != want {
 		t.Fatalf("Port = %d, want %d", got, want)
 	}
@@ -150,6 +162,23 @@ func assertLoadDefaults(t *testing.T, cfg Config) {
 	}
 	if len(cfg.RateBudgets) != 0 {
 		t.Fatalf("RateBudgets = %v, want empty", cfg.RateBudgets)
+	}
+}
+
+func assertLoadPinnedTokens(t *testing.T, cfg Config) {
+	t.Helper()
+	want := []string{"token-a", "token-b", "token-rso", "token-special"}
+	if got := cfg.Tokens; len(got) != len(want) {
+		t.Fatalf("Tokens = %v, want %v", got, want)
+	} else {
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("Tokens = %v, want %v", got, want)
+			}
+		}
+	}
+	if got, want := cfg.AutomaticTokenCount, 2; got != want {
+		t.Fatalf("AutomaticTokenCount = %d, want %d", got, want)
 	}
 }
 

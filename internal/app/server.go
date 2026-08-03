@@ -52,11 +52,12 @@ func New(cfg config.Config, opts ...Option) (*Server, error) {
 	}
 
 	limiterCfg := limiter.Config{
-		KeyCount:         len(cfg.Tokens),
-		QueueCapacity:    cfg.QueueCapacity,
-		AdditionalWindow: cfg.AdditionalWindow,
-		DefaultAppLimits: cfg.DefaultAppLimits,
-		RateBudgets:      limiterRateBudgets(cfg.RateBudgets),
+		KeyCount:          len(cfg.Tokens),
+		AutomaticKeyCount: cfg.AutomaticTokenCount,
+		QueueCapacity:     cfg.QueueCapacity,
+		AdditionalWindow:  cfg.AdditionalWindow,
+		DefaultAppLimits:  cfg.DefaultAppLimits,
+		RateBudgets:       limiterRateBudgets(cfg.RateBudgets),
 	}
 	if collector != nil {
 		limiterCfg.Metrics = collector

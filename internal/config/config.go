@@ -30,19 +30,20 @@ const (
 )
 
 type Config struct {
-	Tokens           []string
-	Port             int
-	QueueCapacity    int
-	AdmissionTimeout time.Duration
-	AdditionalWindow time.Duration
-	ShutdownTimeout  time.Duration
-	MetricsEnabled   bool
-	PprofEnabled     bool
-	SwaggerEnabled   bool
-	UpstreamTimeout  time.Duration
-	DefaultAppLimits string
-	RateBudgets      map[string]RateBudget
-	Server           ServerConfig
+	Tokens              []string
+	AutomaticTokenCount int
+	Port                int
+	QueueCapacity       int
+	AdmissionTimeout    time.Duration
+	AdditionalWindow    time.Duration
+	ShutdownTimeout     time.Duration
+	MetricsEnabled      bool
+	PprofEnabled        bool
+	SwaggerEnabled      bool
+	UpstreamTimeout     time.Duration
+	DefaultAppLimits    string
+	RateBudgets         map[string]RateBudget
+	Server              ServerConfig
 }
 
 type RateBudget struct {
@@ -82,7 +83,10 @@ func Load() (Config, error) {
 	if len(tokens) == 0 {
 		errs = append(errs, fmt.Errorf("RIOT_TOKEN env var is required"))
 	} else {
-		cfg.Tokens = tokens
+		// The limiter selects unpinned requests from this prefix, so explicit-only
+		// tokens must remain after all automatically selectable tokens.
+		cfg.AutomaticTokenCount = len(tokens)
+		cfg.Tokens = append(tokens, splitCSVEnv("RIOT_PINNED_TOKEN")...)
 	}
 
 	mustParseInt("PORT", &cfg.Port, 1, &errs)
