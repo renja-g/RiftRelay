@@ -18,7 +18,7 @@ RiftRelay sits between your application and Riot's API, managing rate limits int
 curl -fsSL "https://raw.githubusercontent.com/renja-g/RiftRelay/main/scripts/setup-docker-stack.sh" | bash
 ```
 
-The script downloads everything you need, prompts for your Riot API token and start RiftRelay at the end.
+The script downloads everything you need, prompts for your Riot API token, and configures the stack. Start it afterward with `cd riftrelay-stack && docker compose up -d`, or pass `--up` to the setup script.
 
 Pre build Docker images are available on the [Docker Hub](https://hub.docker.com/r/renjag/riftrelay).
 

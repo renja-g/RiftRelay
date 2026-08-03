@@ -34,7 +34,7 @@ RiftRelay fetches the Riot OpenAPI spec, rewrites the server URL to point at you
 
 ## `/{region}/{riot-api-path}`
 
-All Riot API traffic goes through this. The first segment is the region; everything after is forwarded verbatim. Bad paths get a `400`.
+All Riot API traffic goes through this. The first segment must be a known Riot routing value, and the remainder must match RiftRelay's generated Riot API route registry. Unknown hosts and paths get a `400` so requests always map to a bounded, canonical rate-limit bucket.
 
 ```sh
 curl "http://localhost:8985/europe/riot/account/v1/accounts/by-riot-id/Someone/EUW1"
@@ -56,7 +56,7 @@ Paths are matched to known Riot API route patterns for bucketing — `/lol/match
 | Client disconnect | `499` | Client hung up before upstream responded |
 | Upstream unavailable | `502` | Upstream unreachable or unrecoverable failure |
 
-RiftRelay retries upstream `429`s when Riot includes a valid `Retry-After` header. This is transport-level behavior, separate from the admission controller.
+RiftRelay retries upstream `429`s when Riot includes a valid `Retry-After` header. Each retryable response is reported to admission control before the wait begins, preventing concurrent requests from bypassing the same backoff window.
 
 ## Exposure recommendations
 

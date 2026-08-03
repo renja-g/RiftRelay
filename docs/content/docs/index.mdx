@@ -4,7 +4,7 @@ description: A rate-limiting proxy for the Riot Games API built in Go with integ
 icon: Shield
 ---
 
-You send requests to RiftRelay instead of directly to the Riot Games API. It validates the route, maps it to the right rate-limit bucket, queues it if needed, and forwards it when a slot opens up. Your app never sees a `429`.
+You send requests to RiftRelay instead of directly to the Riot Games API. It validates the route, maps it to the right rate-limit bucket, queues it if needed, and forwards it when a slot opens up. RiftRelay absorbs retryable upstream `429`s when possible; admission pressure or exhausted retries can still return `429` to your app.
 
 ## What it does
 

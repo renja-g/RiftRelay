@@ -71,7 +71,9 @@ func New(cfg config.Config, opts ...Option) http.Handler {
 	}
 
 	o.baseTransport = transport.WithRequestTimeout(o.baseTransport, cfg.UpstreamTimeout)
-	o.baseTransport = transport.WithRetryAfter429(o.baseTransport, 3)
+	o.baseTransport = transport.WithRetryAfter429(o.baseTransport, 3, func(req *http.Request, resp *http.Response) {
+		observeResponse(o, req, resp, false)
+	})
 
 	rp := newReverseProxy(o)
 	handler := http.Handler(rp)
@@ -124,28 +126,7 @@ func newReverseProxy(o options) *httputil.ReverseProxy {
 		Transport:  o.baseTransport,
 		BufferPool: bufferPool{pool: pool},
 		ModifyResponse: func(resp *http.Response) error {
-			if o.limiter == nil {
-				return nil
-			}
-
-			info, ok := admissionFromContext(resp.Request.Context())
-			if !ok {
-				return nil
-			}
-
-			o.limiter.Observe(limiter.Observation{
-				Region:     info.Region,
-				Bucket:     info.Bucket,
-				KeyIndex:   info.KeyIndex,
-				StatusCode: resp.StatusCode,
-				Header:     resp.Header.Clone(),
-			})
-
-			if o.metrics != nil {
-				duration := time.Since(info.StartedAt)
-				o.metrics.ObserveUpstream(resp.StatusCode, info.Region, info.Bucket, info.Priority)
-				o.metrics.ObserveUpstreamDuration(info.Region, info.Bucket, duration)
-			}
+			observeResponse(o, resp.Request, resp, true)
 			return nil
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
@@ -190,6 +171,34 @@ func newReverseProxy(o options) *httputil.ReverseProxy {
 			}
 			http.Error(w, msg, statusCode)
 		},
+	}
+}
+
+func observeResponse(o options, req *http.Request, resp *http.Response, recordDuration bool) {
+	if req == nil || resp == nil {
+		return
+	}
+	info, ok := admissionFromContext(req.Context())
+	if !ok {
+		return
+	}
+
+	if o.limiter != nil {
+		o.limiter.Observe(limiter.Observation{
+			Region:     info.Region,
+			Bucket:     info.Bucket,
+			KeyIndex:   info.KeyIndex,
+			StatusCode: resp.StatusCode,
+			Header:     resp.Header.Clone(),
+		})
+	}
+	if o.metrics == nil {
+		return
+	}
+
+	o.metrics.ObserveUpstream(resp.StatusCode, info.Region, info.Bucket, info.Priority)
+	if recordDuration {
+		o.metrics.ObserveUpstreamDuration(info.Region, info.Bucket, time.Since(info.StartedAt))
 	}
 }
 

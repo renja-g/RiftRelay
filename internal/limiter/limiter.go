@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/renja-g/RiftRelay/internal/httputil"
@@ -18,7 +19,9 @@ type Limiter struct {
 	cfg       Config
 	admitCh   chan *admitRequest
 	observeCh chan Observation
-	closeCh   chan chan struct{}
+	closeCh   chan struct{}
+	doneCh    chan struct{}
+	closeOnce sync.Once
 }
 
 func New(cfg Config) (*Limiter, error) {
@@ -39,7 +42,8 @@ func New(cfg Config) (*Limiter, error) {
 		cfg:       cfg,
 		admitCh:   make(chan *admitRequest),
 		observeCh: make(chan Observation, 4096),
-		closeCh:   make(chan chan struct{}),
+		closeCh:   make(chan struct{}),
+		doneCh:    make(chan struct{}),
 	}
 	go l.loop()
 
@@ -71,6 +75,8 @@ func (l *Limiter) Admit(ctx context.Context, admission Admission) (Ticket, error
 	case l.admitCh <- req:
 	case <-ctx.Done():
 		return Ticket{}, ctx.Err()
+	case <-l.doneCh:
+		return Ticket{}, &RejectedError{Reason: "shutting_down"}
 	}
 
 	select {
@@ -78,21 +84,29 @@ func (l *Limiter) Admit(ctx context.Context, admission Admission) (Ticket, error
 		return out.ticket, out.err
 	case <-ctx.Done():
 		return Ticket{}, ctx.Err()
+	case <-l.doneCh:
+		return Ticket{}, &RejectedError{Reason: "shutting_down"}
 	}
 }
 
 func (l *Limiter) Observe(observation Observation) {
-	l.observeCh <- observation
+	select {
+	case l.observeCh <- observation:
+	case <-l.doneCh:
+	}
 }
 
 func (l *Limiter) Close() error {
-	done := make(chan struct{})
-	l.closeCh <- done
-	<-done
+	l.closeOnce.Do(func() {
+		close(l.closeCh)
+	})
+	<-l.doneCh
 	return nil
 }
 
 func (l *Limiter) loop() {
+	defer close(l.doneCh)
+
 	keys := make([]keyState, l.cfg.KeyCount)
 	defaultApp := parseRateHeader(l.cfg.DefaultAppLimits, "")
 	for i := range keys {
@@ -135,7 +149,7 @@ func (l *Limiter) loop() {
 				heap.Pop(&wakeups)
 				l.dispatch(next, keys, &wakeups)
 			}
-		case done := <-l.closeCh:
+		case <-l.closeCh:
 			for _, bucket := range buckets {
 				for req := bucket.dequeueValid(); req != nil; req = bucket.dequeueValid() {
 					select {
@@ -144,7 +158,6 @@ func (l *Limiter) loop() {
 					}
 				}
 			}
-			close(done)
 			return
 		}
 	}
@@ -216,8 +229,10 @@ func (l *Limiter) handleObservation(
 	}
 
 	limitType := strings.ToLower(strings.TrimSpace(obs.Header.Get("X-Rate-Limit-Type")))
-	applyMethodRetry := obs.StatusCode == http.StatusTooManyRequests && limitType == "method"
-	applyAppRetry := obs.StatusCode == http.StatusTooManyRequests && !applyMethodRetry
+	isRateLimited := obs.StatusCode == http.StatusTooManyRequests
+	applyMethodRetry := isRateLimited && limitType == "method"
+	applyAppRetry := isRateLimited && limitType == "application"
+	applyServiceRetry := isRateLimited && !applyMethodRetry && !applyAppRetry
 
 	key := &keys[obs.KeyIndex]
 
@@ -226,6 +241,13 @@ func (l *Limiter) handleObservation(
 
 	key.app(obs.Region, now, l.cfg.AdditionalWindow).apply(appLimits, retryAfter, applyAppRetry, now, l.cfg.AdditionalWindow)
 	key.method(obs.Bucket).apply(methodLimits, retryAfter, applyMethodRetry, now, l.cfg.AdditionalWindow)
+	if applyServiceRetry {
+		// Service and untyped limits are shared across API keys. Without a service identifier
+		// in the response, conservatively pause all keys in the affected region.
+		for i := range keys {
+			keys[i].app(obs.Region, now, l.cfg.AdditionalWindow).apply(nil, retryAfter, true, now, l.cfg.AdditionalWindow)
+		}
+	}
 
 	// An app-limit update can unblock or block multiple buckets in the same region.
 	for _, bucket := range regionIndex[obs.Region] {

@@ -183,6 +183,55 @@ func TestLimiterQueueFull(t *testing.T) {
 	})
 }
 
+func TestLimiterCloseIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	l, err := New(Config{
+		KeyCount:         1,
+		QueueCapacity:    1,
+		DefaultAppLimits: "20:1",
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if err := l.Close(); err != nil {
+		t.Fatalf("first Close() error = %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- l.Close()
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("second Close() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("second Close() blocked")
+	}
+
+	_, err = l.Admit(context.Background(), Admission{
+		Region: "europe",
+		Bucket: "europe:riot/account/v1/accounts/me",
+	})
+	var rejected *RejectedError
+	if !errors.As(err, &rejected) || rejected.Reason != "shutting_down" {
+		t.Fatalf("Admit() after Close() error = %v, want shutting_down RejectedError", err)
+	}
+
+	observeDone := make(chan struct{})
+	go func() {
+		l.Observe(Observation{Region: "europe", Bucket: "europe:riot/account/v1/accounts/me"})
+		close(observeDone)
+	}()
+	select {
+	case <-observeDone:
+	case <-time.After(time.Second):
+		t.Fatal("Observe() after Close() blocked")
+	}
+}
+
 func TestLimiterHighPriorityBypassesQueuedNormal(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		l, err := New(Config{
@@ -417,6 +466,65 @@ func TestLimiterObserveRetryAfterBlocksUntilWindow(t *testing.T) {
 			t.Fatalf("Admit() after Retry-After error = %v", err)
 		}
 	})
+}
+
+func TestLimiterObserveSharedRetryAfterBlocksAllKeys(t *testing.T) {
+	for _, limitType := range []string{"service", ""} {
+		name := limitType
+		if name == "" {
+			name = "missing_type"
+		}
+		t.Run(name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				l, err := New(Config{
+					KeyCount:         2,
+					QueueCapacity:    2,
+					DefaultAppLimits: "20:1",
+				})
+				if err != nil {
+					t.Fatalf("New() error = %v", err)
+				}
+				defer func() { _ = l.Close() }()
+
+				bucket := "europe:riot/account/v1/accounts/me"
+				header := http.Header{"Retry-After": []string{"2"}}
+				if limitType != "" {
+					header.Set("X-Rate-Limit-Type", limitType)
+				}
+				l.Observe(Observation{
+					Region:     "europe",
+					Bucket:     bucket,
+					KeyIndex:   0,
+					StatusCode: http.StatusTooManyRequests,
+					Header:     header,
+				})
+				synctest.Wait()
+
+				done := make(chan error, 1)
+				go func() {
+					_, admitErr := l.Admit(context.Background(), Admission{
+						Region:     "europe",
+						Bucket:     bucket,
+						TokenIndex: intPtr(1),
+					})
+					done <- admitErr
+				}()
+				synctest.Wait()
+
+				select {
+				case err := <-done:
+					t.Fatalf("Admit() finished before shared Retry-After elapsed with %v", err)
+				default:
+				}
+
+				time.Sleep(2 * time.Second)
+				synctest.Wait()
+				if err := <-done; err != nil {
+					t.Fatalf("Admit() after shared Retry-After error = %v", err)
+				}
+			})
+		})
+	}
 }
 
 func intPtr(v int) *int {

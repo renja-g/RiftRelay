@@ -31,12 +31,21 @@ type Collector struct {
 // responseRecorder wraps http.ResponseWriter to capture the status code.
 type responseRecorder struct {
 	http.ResponseWriter
-	statusCode int
+	statusCode  int
+	wroteHeader bool
 }
 
 func (rr *responseRecorder) WriteHeader(code int) {
+	if rr.wroteHeader {
+		return
+	}
+	rr.wroteHeader = true
 	rr.statusCode = code
 	rr.ResponseWriter.WriteHeader(code)
+}
+
+func (rr *responseRecorder) Unwrap() http.ResponseWriter {
+	return rr.ResponseWriter
 }
 
 // NewCollector creates a new metrics collector with all Prometheus metrics registered.
