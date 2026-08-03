@@ -79,7 +79,11 @@ func New(cfg config.Config, opts ...Option) http.Handler {
 	handler := http.Handler(rp)
 
 	if o.limiter != nil {
-		handler = admissionMiddleware(o.limiter, o.metrics, o.admitTimeout)(handler)
+		automaticTokenCount := cfg.AutomaticTokenCount
+		if automaticTokenCount == 0 {
+			automaticTokenCount = len(cfg.Tokens)
+		}
+		handler = admissionMiddleware(o.limiter, o.metrics, o.admitTimeout, automaticTokenCount)(handler)
 	}
 	if o.metrics != nil {
 		handler = o.metrics.Middleware(handler)
@@ -110,11 +114,14 @@ func newReverseProxy(o options) *httputil.ReverseProxy {
 		preq.Out.Host = host
 		preq.Out.URL.Path = info.UpstreamPath
 
-		keyIndex := 0
-		if value, ok := keyIndexFromContext(preq.In.Context()); ok && value >= 0 && value < len(o.apiTokens) {
-			keyIndex = value
+		admission, admitted := admissionFromContext(preq.In.Context())
+		keyIndex := admission.KeyIndex
+		if !admitted || keyIndex < 0 || keyIndex >= len(o.apiTokens) {
+			keyIndex = 0
 		}
-		if len(o.apiTokens) > 0 {
+		if admitted && admission.AuthMode == authModeBearer {
+			preq.Out.Header.Del("X-Riot-Token")
+		} else if len(o.apiTokens) > 0 {
 			preq.Out.Header.Set("X-Riot-Token", o.apiTokens[keyIndex])
 		}
 		preq.Out.Header.Set("Accept-Encoding", "gzip")
@@ -200,15 +207,4 @@ func observeResponse(o options, req *http.Request, resp *http.Response, recordDu
 	if recordDuration {
 		o.metrics.ObserveUpstreamDuration(info.Region, info.Bucket, time.Since(info.StartedAt))
 	}
-}
-
-type keyIndexContextKey struct{}
-
-func withKeyIndex(ctx context.Context, keyIndex int) context.Context {
-	return context.WithValue(ctx, keyIndexContextKey{}, keyIndex)
-}
-
-func keyIndexFromContext(ctx context.Context) (int, bool) {
-	value, ok := ctx.Value(keyIndexContextKey{}).(int)
-	return value, ok
 }

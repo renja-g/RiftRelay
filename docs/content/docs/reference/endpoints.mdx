@@ -41,7 +41,7 @@ curl "http://localhost:8985/europe/riot/account/v1/accounts/by-riot-id/Someone/E
 # -> https://europe.api.riotgames.com/riot/account/v1/accounts/by-riot-id/Someone/EUW1
 ```
 
-RiftRelay injects the token. Don't send `X-Riot-Token` from your client.
+For normal requests, RiftRelay replaces any client-supplied `X-Riot-Token` with the selected configured token. For a validated Bearer request using a pinned token index, RiftRelay forwards `Authorization` and removes `X-Riot-Token`.
 
 Paths are matched to known Riot API route patterns for bucketing — `/lol/match/v5/matches/EUW1_1234567890` gets grouped under `/lol/match/v5/matches/{matchId}`.
 
@@ -50,7 +50,7 @@ Paths are matched to known Riot API route patterns for bucketing — `/lol/match
 | Route type | Status | Meaning |
 | --- | --- | --- |
 | Health | `204` | Healthy |
-| Invalid proxy path or header | `400` | Malformed path, bad token index, or unknown `X-Rate-Budget` |
+| Invalid proxy path or header | `400` | Malformed path, invalid authorization, bad token index, Bearer request without a pinned index, or unknown `X-Rate-Budget` |
 | Admission rejection | `429` | Queue full or admission timeout; `Retry-After` included when applicable |
 | Upstream timeout | `408` | Upstream call exceeded timeout budget |
 | Client disconnect | `499` | Client hung up before upstream responded |

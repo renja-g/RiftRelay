@@ -22,16 +22,17 @@ func TestProxyNewRewritesRequestAndInjectsToken(t *testing.T) {
 
 	var gotHost string
 	var gotPath string
-	var gotToken string
+	var gotTokens []string
 
 	handler := New(cfg, WithBaseTransport(testutil.RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
 		gotHost = r.URL.Host
 		gotPath = r.URL.Path
-		gotToken = r.Header.Get("X-Riot-Token")
+		gotTokens = r.Header.Values("X-Riot-Token")
 		return testutil.HTTPResponse(http.StatusNoContent, "", nil), nil
 	})))
 
 	req := httptest.NewRequest(http.MethodGet, "/europe/riot/account/v1/accounts/me", nil)
+	req.Header.Set("X-Riot-Token", "client-supplied-token")
 	rec := httptest.NewRecorder()
 
 	handler.ServeHTTP(rec, req)
@@ -45,8 +46,103 @@ func TestProxyNewRewritesRequestAndInjectsToken(t *testing.T) {
 	if got, want := gotPath, "/riot/account/v1/accounts/me"; got != want {
 		t.Fatalf("path = %q, want %q", got, want)
 	}
-	if got, want := gotToken, cfg.Tokens[0]; got != want {
+	if got, want := gotTokens, []string{cfg.Tokens[0]}; len(got) != 1 || got[0] != want[0] {
 		t.Fatalf("X-Riot-Token = %q, want %q", got, want)
+	}
+}
+
+func TestProxyNewForwardsBearerAndStripsClientRiotToken(t *testing.T) {
+	t.Parallel()
+
+	l, err := limiter.New(limiter.Config{
+		KeyCount:          2,
+		AutomaticKeyCount: 1,
+		QueueCapacity:     2,
+		DefaultAppLimits:  "20:1",
+	})
+	if err != nil {
+		t.Fatalf("limiter.New() error = %v", err)
+	}
+	t.Cleanup(func() {
+		_ = l.Close()
+	})
+
+	cfg := testutil.DummyConfig()
+	cfg.Tokens = []string{"automatic-token", "rso-rate-limit-slot"}
+	cfg.AutomaticTokenCount = 1
+	cfg.UpstreamTimeout = 0
+
+	var gotAuthorization string
+	var gotRiotTokens []string
+	handler := New(cfg, WithLimiter(l), WithBaseTransport(testutil.RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		gotAuthorization = r.Header.Get("Authorization")
+		gotRiotTokens = r.Header.Values("X-Riot-Token")
+		return testutil.HTTPResponse(http.StatusNoContent, "", nil), nil
+	})))
+
+	req := httptest.NewRequest(http.MethodGet, "/europe/riot/account/v1/accounts/me", nil)
+	req.Header.Set("Authorization", "Bearer access-token")
+	req.Header.Set("X-Riot-Token-Index", "1")
+	req.Header.Add("X-Riot-Token", "client-supplied-token")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if got, want := rec.Code, http.StatusNoContent; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+	if got, want := gotAuthorization, "Bearer access-token"; got != want {
+		t.Errorf("Authorization = %q, want %q", got, want)
+	}
+	if len(gotRiotTokens) != 0 {
+		t.Errorf("X-Riot-Token = %q, want absent", gotRiotTokens)
+	}
+}
+
+func TestProxyNewRejectsBearerWithoutPinnedTokenIndex(t *testing.T) {
+	t.Parallel()
+
+	l, err := limiter.New(limiter.Config{
+		KeyCount:          2,
+		AutomaticKeyCount: 1,
+		QueueCapacity:     2,
+		DefaultAppLimits:  "20:1",
+	})
+	if err != nil {
+		t.Fatalf("limiter.New() error = %v", err)
+	}
+	t.Cleanup(func() {
+		_ = l.Close()
+	})
+
+	cfg := testutil.DummyConfig()
+	cfg.Tokens = []string{"automatic-token", "rso-rate-limit-slot"}
+	cfg.AutomaticTokenCount = 1
+	handler := New(cfg, WithLimiter(l), WithBaseTransport(testutil.RoundTripperFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatal("upstream transport should not be called")
+		return nil, nil
+	})))
+
+	for _, tt := range []struct {
+		name       string
+		tokenIndex string
+	}{
+		{name: "missing index"},
+		{name: "automatic index", tokenIndex: "0"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/europe/riot/account/v1/accounts/me", nil)
+			req.Header.Set("Authorization", "Bearer access-token")
+			if tt.tokenIndex != "" {
+				req.Header.Set("X-Riot-Token-Index", tt.tokenIndex)
+			}
+			rec := httptest.NewRecorder()
+
+			handler.ServeHTTP(rec, req)
+
+			if got, want := rec.Code, http.StatusBadRequest; got != want {
+				t.Fatalf("status = %d, want %d", got, want)
+			}
+		})
 	}
 }
 

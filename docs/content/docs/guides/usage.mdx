@@ -38,10 +38,23 @@ Pass a token's 0-based index to select it explicitly. `RIOT_TOKEN` entries come 
 
 ```text
 RIOT_TOKEN=token-a,token-b
-RIOT_PINNED_TOKEN=rso-token
+RIOT_PINNED_TOKEN=rso-rate-limit-slot
 ```
 
-In this example, the RSO token has index `2` and is selected with `X-Riot-Token-Index: 2`. The order of the environment-variable declarations does not affect token indices.
+In this example, the RSO rate-limit slot has index `2`. The order of the environment-variable declarations does not affect token indices.
+
+### `Authorization: Bearer`
+
+Bearer-authenticated RSO requests must select an index from `RIOT_PINNED_TOKEN`. This gives the RSO client independent rate-limit state and prevents its response headers from changing the state of a normal API key. RiftRelay forwards the validated `Authorization` header and removes `X-Riot-Token` before sending the request upstream.
+
+```sh
+curl \
+  -H "Authorization: Bearer $RSO_ACCESS_TOKEN" \
+  -H "X-Riot-Token-Index: 2" \
+  "http://localhost:8985/europe/riot/account/v1/accounts/me"
+```
+
+Missing or automatically selectable indices return `400`. Unsupported authorization schemes and empty Bearer tokens also return `400`.
 
 ## Timeouts
 
