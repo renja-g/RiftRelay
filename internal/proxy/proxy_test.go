@@ -196,7 +196,7 @@ func TestProxyNewMapsTransportErrors(t *testing.T) {
 		{
 			name:       "deadline exceeded",
 			err:        context.DeadlineExceeded,
-			wantStatus: http.StatusRequestTimeout,
+			wantStatus: http.StatusGatewayTimeout,
 			wantRetry:  "1",
 		},
 		{
@@ -208,6 +208,7 @@ func TestProxyNewMapsTransportErrors(t *testing.T) {
 			name:       "generic upstream failure",
 			err:        errors.New("boom"),
 			wantStatus: http.StatusBadGateway,
+			wantRetry:  "1",
 		},
 	}
 

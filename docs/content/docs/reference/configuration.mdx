@@ -15,7 +15,8 @@ RiftRelay is configured entirely through environment variables. The only require
 | `ADMISSION_TIMEOUT` | No | `5m` | How long a request can wait in the queue |
 | `ADDITIONAL_WINDOW_SIZE` | No | `150ms` | Safety buffer added to rate-limit windows to avoid edge-of-reset bursts |
 | `SHUTDOWN_TIMEOUT` | No | `20s` | Graceful shutdown deadline |
-| `UPSTREAM_TIMEOUT` | No | `0` | Timeout for Riot API calls (`0` = no timeout) |
+| `UPSTREAM_TIMEOUT` | No | `20s` | Deadline for each Riot API attempt, including reading the full response body (`0` = no deadline) |
+| `UPSTREAM_RETRIES` | No | `2` | Retries for a failed `GET`/`HEAD` upstream response (`0` = no retries); see [upstream retries](/docs/reference/endpoints#upstream-retries) |
 | `ENABLE_METRICS` | No | `true` | Expose `/metrics` |
 | `ENABLE_PPROF` | No | `false` | Expose `/debug/pprof/` |
 | `ENABLE_SWAGGER` | No | `true` | Expose `/swagger/` |
@@ -73,9 +74,10 @@ RiftRelay validates everything at startup and fails fast if:
 - an integer isn't a valid integer, or a boolean isn't a valid boolean
 - a duration can't be parsed
 - `PORT` is out of range
+- `UPSTREAM_RETRIES` is negative
 - `DEFAULT_APP_RATE_LIMIT` is malformed
 - a `RATE_BUDGET_*` share is outside `0 < share <= 1`
 
 ## Internal HTTP server timeouts
 
-Some server timeouts (read header, read, write, idle) are intentionally not user-configurable. The write timeout is derived from `ADMISSION_TIMEOUT` + `UPSTREAM_TIMEOUT` + a safety buffer. When `UPSTREAM_TIMEOUT` is `0`, a default upstream budget is used internally for the calculation.
+Some server timeouts (read header, read, write, idle) are intentionally not user-configurable. The write timeout is derived from `ADMISSION_TIMEOUT` + `UPSTREAM_TIMEOUT` + a safety buffer. When `UPSTREAM_TIMEOUT` is `0`, a default upstream budget is used internally for the calculation. Each upstream retry extends the write deadline by its own admission and attempt budget.

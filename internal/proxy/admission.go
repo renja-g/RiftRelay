@@ -24,13 +24,15 @@ const (
 var errInvalidAuthorization = errors.New("invalid Authorization header: expected a Bearer token")
 
 type admissionContext struct {
-	Region    string
-	Bucket    string
-	BudgetID  string
-	KeyIndex  int
-	Priority  string
-	AuthMode  authMode
-	StartedAt time.Time
+	Region   string
+	Bucket   string
+	BudgetID string
+	KeyIndex int
+	// TokenIndex is the client's X-Riot-Token-Index, kept so retries stay pinned.
+	TokenIndex *int
+	Priority   string
+	AuthMode   authMode
+	StartedAt  time.Time
 }
 
 type admissionContextKey struct{}
@@ -154,13 +156,14 @@ func admissionMiddleware(
 			}
 
 			ctx := withAdmission(r.Context(), admissionContext{
-				Region:    info.Region,
-				Bucket:    info.Bucket,
-				BudgetID:  budgetLabel,
-				KeyIndex:  ticket.KeyIndex,
-				Priority:  priority.String(),
-				AuthMode:  authMode,
-				StartedAt: time.Now(), // Captured after admission so upstream_duration excludes queue wait
+				Region:     info.Region,
+				Bucket:     info.Bucket,
+				BudgetID:   budgetLabel,
+				KeyIndex:   ticket.KeyIndex,
+				TokenIndex: tokenIndex,
+				Priority:   priority.String(),
+				AuthMode:   authMode,
+				StartedAt:  time.Now(), // Captured after admission so upstream_duration excludes queue wait
 			})
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

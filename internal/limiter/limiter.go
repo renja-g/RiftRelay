@@ -140,6 +140,9 @@ func (l *Limiter) loop() {
 
 		select {
 		case req := <-l.admitCh:
+			// Apply observations sent before this admission, so a caller that observes
+			// a 429 and then re-admits is held back by that 429.
+			l.drainObservations(keys, regionIndex, &wakeups)
 			l.handleAdmit(req, keys, buckets, regionIndex, &wakeups)
 		case obs := <-l.observeCh:
 			l.handleObservation(obs, keys, regionIndex, &wakeups)

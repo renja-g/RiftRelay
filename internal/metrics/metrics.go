@@ -20,6 +20,7 @@ type Collector struct {
 	admissionTotal *prometheus.CounterVec
 	queueDepth     *prometheus.GaugeVec
 	upstreamTotal  *prometheus.CounterVec
+	upstreamFails  *prometheus.CounterVec
 
 	requestDuration  *prometheus.HistogramVec
 	queueWaitSeconds *prometheus.HistogramVec
@@ -76,6 +77,10 @@ func NewCollector() *Collector {
 			Name: "riftrelay_upstream_responses_total",
 			Help: "Total number of upstream responses by status code",
 		}, []string{"code", "region", "endpoint", "priority"}),
+		upstreamFails: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "riftrelay_upstream_failures_total",
+			Help: "Failed upstream attempts by cause and what RiftRelay did about them",
+		}, []string{"cause", "outcome", "region", "endpoint"}),
 		requestDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Name:    "riftrelay_request_duration_seconds",
 			Help:    "HTTP request duration in seconds",
@@ -99,6 +104,7 @@ func NewCollector() *Collector {
 		c.admissionTotal,
 		c.queueDepth,
 		c.upstreamTotal,
+		c.upstreamFails,
 		c.requestDuration,
 		c.queueWaitSeconds,
 		c.upstreamDuration,
@@ -160,6 +166,12 @@ func (c *Collector) ObserveAdmissionResult(outcome, region, bucket, priority str
 // ObserveUpstream records upstream response metrics.
 func (c *Collector) ObserveUpstream(statusCode int, region, bucket, priority string) {
 	c.upstreamTotal.WithLabelValues(statusCodeStr(statusCode), region, endpointFromBucket(bucket), priority).Inc()
+}
+
+// ObserveUpstreamFailure records a failed upstream attempt. Outcome says whether
+// the attempt was retried or the failure was returned to the client.
+func (c *Collector) ObserveUpstreamFailure(cause, outcome, region, bucket string) {
+	c.upstreamFails.WithLabelValues(cause, outcome, region, endpointFromBucket(bucket)).Inc()
 }
 
 // ObserveUpstreamDuration records upstream request duration with region and bucket labels.

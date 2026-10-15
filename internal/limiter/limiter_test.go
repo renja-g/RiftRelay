@@ -557,6 +557,43 @@ func TestLimiterObserveRetryAfterBlocksUntilWindow(t *testing.T) {
 	})
 }
 
+// The proxy observes a 429 and then re-admits the retry from the same goroutine;
+// the admission must not overtake that observation.
+func TestLimiterAppliesObservationBeforeLaterAdmission(t *testing.T) {
+	for i := 0; i < 20; i++ {
+		synctest.Test(t, func(t *testing.T) {
+			l, err := New(Config{
+				KeyCount:         1,
+				QueueCapacity:    2,
+				DefaultAppLimits: "20:1",
+			})
+			if err != nil {
+				t.Fatalf("New() error = %v", err)
+			}
+			defer func() { _ = l.Close() }()
+
+			bucket := "europe:riot/account/v1/accounts/me"
+			start := time.Now()
+			l.Observe(Observation{
+				Region:     "europe",
+				Bucket:     bucket,
+				KeyIndex:   0,
+				StatusCode: http.StatusTooManyRequests,
+				Header: http.Header{
+					"Retry-After":       []string{"2"},
+					"X-Rate-Limit-Type": []string{"application"},
+				},
+			})
+			if _, err := l.Admit(context.Background(), Admission{Region: "europe", Bucket: bucket, Priority: PriorityHigh}); err != nil {
+				t.Fatalf("Admit() error = %v", err)
+			}
+			if got := time.Since(start); got < 2*time.Second {
+				t.Fatalf("Admit() returned after %v, want >= 2s", got)
+			}
+		})
+	}
+}
+
 func TestLimiterObserveSharedRetryAfterBlocksAllKeys(t *testing.T) {
 	for _, limitType := range []string{"service", ""} {
 		name := limitType

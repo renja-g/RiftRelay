@@ -102,7 +102,8 @@ Supported environment variables:
 | `ADMISSION_TIMEOUT` | `5m` | Max wait time for admission (how long a request can wait in the queue) |
 | `ADDITIONAL_WINDOW_SIZE` | `150ms` | Extra buffer added to rate limit windows |
 | `SHUTDOWN_TIMEOUT` | `20s` | Graceful shutdown timeout |
-| `UPSTREAM_TIMEOUT` | `0` | Timeout for upstream requests (0 = no timeout) |
+| `UPSTREAM_TIMEOUT` | `20s` | Deadline for each upstream attempt, including reading the response body (0 = no deadline) |
+| `UPSTREAM_RETRIES` | `2` | Retries for a failed `GET`/`HEAD` upstream response (0 = no retries) |
 | `ENABLE_METRICS` | `true` | Enable `/metrics` endpoint |
 | `ENABLE_PPROF` | `false` | Enable pprof endpoints |
 | `ENABLE_SWAGGER` | `true` | Enable Swagger UI |
@@ -122,6 +123,8 @@ Supported environment variables:
 When requests come in, RiftRelay figures out which rate limit bucket they belong to and adds them to a queue. A scheduler picks requests from the queue and sends them when there's room in the rate limit window. Instead of sending all requests at once when the limit resets, RiftRelay spreads them out evenly over time to avoid sudden bursts.
 
 If there's no room in the rate limit window, RiftRelay returns `429 Too Many Requests` with a `Retry-After` header telling you when to try again. Requests that do get through are sent to Riot's API, and RiftRelay keeps track of the rate limits based on the response headers it gets back.
+
+For `GET` requests, RiftRelay reads the whole response before forwarding it. If Riot resets the stream, stalls, sends a truncated or invalid JSON body, or returns `502`/`503`/`504`, RiftRelay retries through the same rate limiting. When retries do not recover the request, the client gets an error status with `Retry-After`, never a `200` with a broken body.
 
 Rate budgets are one-sided pacing hints. A budget such as `RATE_BUDGET_worker=0.8` makes `X-Rate-Budget: worker` space requests as if the limit were 80% of the full Riot limit, but it does not reserve the remaining 20% for other traffic. Other traffic still uses normal full-limit pacing and all traffic shares the same hard Riot counters.
 

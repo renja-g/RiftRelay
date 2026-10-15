@@ -58,11 +58,11 @@ Missing or automatically selectable indices return `400`. Unsupported authorizat
 
 ## Timeouts
 
-Requests can sit in the admission queue before being forwarded. `ADMISSION_TIMEOUT` controls how long that's allowed to take, and `UPSTREAM_TIMEOUT` caps the Riot API call itself. See [configuration](/docs/reference/configuration).
+Requests can sit in the admission queue before being forwarded. `ADMISSION_TIMEOUT` controls how long that's allowed to take, and `UPSTREAM_TIMEOUT` caps each Riot API attempt, including reading the response body. Failed `GET` responses are retried before the client sees a status; see [upstream retries](/docs/reference/endpoints#upstream-retries). See [configuration](/docs/reference/configuration).
 
 ## Errors
 
-Standard HTTP codes: `400` for bad paths, `429` when the queue is full or admission times out, `408` for upstream timeouts, `502` for upstream failures. Full table in [endpoints](/docs/reference/endpoints#error-behavior).
+Standard HTTP codes: `400` for bad paths, `429` when the queue is full or admission times out, `502` for upstream failures, `504` for upstream timeouts. Full table in [endpoints](/docs/reference/endpoints#error-behavior).
 
 ## Tips
 

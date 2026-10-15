@@ -41,6 +41,7 @@ func TestLoad(t *testing.T) {
 				"ADDITIONAL_WINDOW_SIZE": "25ms",
 				"SHUTDOWN_TIMEOUT":       "4s",
 				"UPSTREAM_TIMEOUT":       "7s",
+				"UPSTREAM_RETRIES":       "0",
 				"ENABLE_METRICS":         "false",
 				"ENABLE_PPROF":           "true",
 				"ENABLE_SWAGGER":         "false",
@@ -63,6 +64,7 @@ func TestLoad(t *testing.T) {
 				"PORT":                   "70000",
 				"QUEUE_CAPACITY":         "0",
 				"ADMISSION_TIMEOUT":      "nope",
+				"UPSTREAM_RETRIES":       "-1",
 				"ENABLE_METRICS":         "sometimes",
 				"DEFAULT_APP_RATE_LIMIT": "bad",
 				"RATE_BUDGET_default":    "0.5",
@@ -73,6 +75,7 @@ func TestLoad(t *testing.T) {
 				"PORT must be <= 65535",
 				"QUEUE_CAPACITY must be >= 1",
 				"ADMISSION_TIMEOUT must be a valid duration",
+				"UPSTREAM_RETRIES must be >= 0",
 				"ENABLE_METRICS must be a boolean",
 				"DEFAULT_APP_RATE_LIMIT must be in format",
 				"RATE_BUDGET_default has invalid budget id",
@@ -119,6 +122,7 @@ func clearConfigEnv(t *testing.T) {
 		"ADDITIONAL_WINDOW_SIZE",
 		"SHUTDOWN_TIMEOUT",
 		"UPSTREAM_TIMEOUT",
+		"UPSTREAM_RETRIES",
 		"ENABLE_METRICS",
 		"ENABLE_PPROF",
 		"ENABLE_SWAGGER",
@@ -157,7 +161,13 @@ func assertLoadDefaults(t *testing.T, cfg Config) {
 	if got, want := cfg.Port, defaultPort; got != want {
 		t.Fatalf("Port = %d, want %d", got, want)
 	}
-	if got, want := cfg.Server.WriteTimeout, defaultAdmissionTimeout+5*time.Minute+30*time.Second; got != want {
+	if got, want := cfg.UpstreamTimeout, 20*time.Second; got != want {
+		t.Fatalf("UpstreamTimeout = %v, want %v", got, want)
+	}
+	if got, want := cfg.UpstreamRetries, 2; got != want {
+		t.Fatalf("UpstreamRetries = %d, want %d", got, want)
+	}
+	if got, want := cfg.Server.WriteTimeout, defaultAdmissionTimeout+20*time.Second+30*time.Second; got != want {
 		t.Fatalf("Server.WriteTimeout = %v, want %v", got, want)
 	}
 	if len(cfg.RateBudgets) != 0 {
@@ -192,6 +202,9 @@ func assertLoadCustomValues(t *testing.T, cfg Config) {
 	}
 	if got, want := cfg.UpstreamTimeout, 7*time.Second; got != want {
 		t.Fatalf("UpstreamTimeout = %v, want %v", got, want)
+	}
+	if got, want := cfg.UpstreamRetries, 0; got != want {
+		t.Fatalf("UpstreamRetries = %d, want %d", got, want)
 	}
 	if cfg.MetricsEnabled {
 		t.Fatal("MetricsEnabled = true, want false")

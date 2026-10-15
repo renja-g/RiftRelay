@@ -20,7 +20,8 @@ const (
 	defaultEnableMetrics        = true
 	defaultEnablePprof          = false
 	defaultEnableSwagger        = true
-	defaultUpstreamTimeout      = 0
+	defaultUpstreamTimeout      = 20 * time.Second
+	defaultUpstreamRetries      = 2
 	defaultAppRateLimit         = "20:1,100:120"
 
 	// HTTP server tuning (internal)
@@ -41,6 +42,7 @@ type Config struct {
 	PprofEnabled        bool
 	SwaggerEnabled      bool
 	UpstreamTimeout     time.Duration
+	UpstreamRetries     int
 	DefaultAppLimits    string
 	RateBudgets         map[string]RateBudget
 	Server              ServerConfig
@@ -71,6 +73,7 @@ func Load() (Config, error) {
 		PprofEnabled:     defaultEnablePprof,
 		SwaggerEnabled:   defaultEnableSwagger,
 		UpstreamTimeout:  defaultUpstreamTimeout,
+		UpstreamRetries:  defaultUpstreamRetries,
 		DefaultAppLimits: defaultAppRateLimit,
 		Server: ServerConfig{
 			ReadHeaderTimeout: defaultReadHeaderTimeout,
@@ -95,6 +98,7 @@ func Load() (Config, error) {
 	mustParseDuration("ADDITIONAL_WINDOW_SIZE", &cfg.AdditionalWindow, &errs)
 	mustParseDuration("SHUTDOWN_TIMEOUT", &cfg.ShutdownTimeout, &errs)
 	mustParseDuration("UPSTREAM_TIMEOUT", &cfg.UpstreamTimeout, &errs)
+	mustParseInt("UPSTREAM_RETRIES", &cfg.UpstreamRetries, 0, &errs)
 
 	mustParseBool("ENABLE_METRICS", &cfg.MetricsEnabled, &errs)
 	mustParseBool("ENABLE_PPROF", &cfg.PprofEnabled, &errs)

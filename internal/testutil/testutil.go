@@ -28,6 +28,7 @@ func DummyConfig() config.Config {
 		PprofEnabled:     false,
 		SwaggerEnabled:   true,
 		UpstreamTimeout:  250 * time.Millisecond,
+		UpstreamRetries:  2,
 		DefaultAppLimits: "20:1,100:120",
 		Server: config.ServerConfig{
 			ReadHeaderTimeout: 10 * time.Second,

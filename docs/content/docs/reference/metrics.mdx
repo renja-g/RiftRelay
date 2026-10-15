@@ -44,6 +44,22 @@ Time requests spend waiting in the admission queue. Labels: `bucket`, `priority`
 
 Upstream responses from Riot. Labels: `code`, `region`, `endpoint`, `priority`. Watch `code="429"` specifically.
 
+### `riftrelay_upstream_failures_total` (counter)
+
+Failed upstream attempts. Labels: `cause`, `outcome`, `region`, `endpoint`. Each failed attempt is counted once.
+
+`cause` is one of `stream_reset`, `goaway`, `unexpected_eof`, `connection`, `header_timeout`, `body_timeout`, `invalid_body`, `http_429`, `http_502`, `http_503`, `http_504`.
+
+`outcome` says what happened next:
+
+- `retried`: RiftRelay retried the request (see [upstream retries](/docs/reference/endpoints#upstream-retries))
+- `exhausted`: no retries were left, so the client got an error
+- `not_retryable`: the request or failure can't be retried (a non-`GET` request, a `429` without `Retry-After`, or a `5xx` asking to wait more than 5 seconds)
+- `retry_rejected`: admission control did not admit the retry within `ADMISSION_TIMEOUT`
+- `canceled`: the client disconnected
+
+Anything other than `retried` reached the client as an error status.
+
 ### `riftrelay_upstream_duration_seconds` (histogram)
 
 How long upstream calls take after admission. Separates queue wait (before the call) from upstream latency (during the call), so you can tell whether slowness is from rate limiting or from Riot.
@@ -66,6 +82,8 @@ Standard `go_*` and `process_*` collectors are registered.
 | `priority` | `normal`, `high` | all |
 | `budget_id` | `default` or a configured budget ID | admission, queue wait |
 | `outcome` | `allowed`, `rejected_*`, `shutting_down` | admission |
+| `outcome` | `retried`, `exhausted`, `not_retryable`, `retry_rejected`, `canceled` | upstream failures |
+| `cause` | upstream failure cause | upstream failures |
 | `code` | HTTP status code | upstream responses |
 
 ## Useful PromQL
@@ -74,6 +92,18 @@ Upstream 429 rate (are you hitting Riot's limits?):
 
 ```text
 rate(riftrelay_upstream_responses_total{code="429"}[5m])
+```
+
+Upstream failures RiftRelay did not recover, by cause:
+
+```text
+sum by (cause, outcome) (increase(riftrelay_upstream_failures_total{outcome!="retried"}[1h]))
+```
+
+Upstream body failures recovered by a retry:
+
+```text
+sum by (cause) (increase(riftrelay_upstream_failures_total{outcome="retried", cause!~"http_.*"}[1h]))
 ```
 
 Admission rejection rate:

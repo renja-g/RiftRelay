@@ -30,11 +30,14 @@ func (p bufferPool) Put(b []byte) {
 }
 
 type options struct {
-	baseTransport http.RoundTripper
-	limiter       *limiter.Limiter
-	metrics       *metrics.Collector
-	admitTimeout  time.Duration
-	apiTokens     []string
+	baseTransport  http.RoundTripper
+	limiter        *limiter.Limiter
+	metrics        *metrics.Collector
+	admitTimeout   time.Duration
+	attemptTimeout time.Duration
+	maxRetries     int
+	maxBody        int
+	apiTokens      []string
 }
 
 type Option func(*options)
@@ -62,21 +65,36 @@ func WithMetrics(m *metrics.Collector) Option {
 // New constructs the reverse proxy handler.
 func New(cfg config.Config, opts ...Option) http.Handler {
 	o := options{
-		baseTransport: transport.New(),
-		admitTimeout:  cfg.AdmissionTimeout,
-		apiTokens:     cfg.Tokens,
+		baseTransport:  transport.New(),
+		admitTimeout:   cfg.AdmissionTimeout,
+		attemptTimeout: cfg.UpstreamTimeout,
+		maxRetries:     cfg.UpstreamRetries,
+		maxBody:        defaultMaxBufferedBody,
+		apiTokens:      cfg.Tokens,
 	}
 	for _, opt := range opts {
 		opt(&o)
 	}
 
-	o.baseTransport = transport.WithRequestTimeout(o.baseTransport, cfg.UpstreamTimeout)
-	o.baseTransport = transport.WithRetryAfter429(o.baseTransport, 3, func(req *http.Request, resp *http.Response) {
-		observeResponse(o, req, resp, false)
-	})
+	o.baseTransport = &upstreamTransport{
+		base:           o.baseTransport,
+		limiter:        o.limiter,
+		metrics:        o.metrics,
+		tokens:         o.apiTokens,
+		attemptTimeout: o.attemptTimeout,
+		admitTimeout:   o.admitTimeout,
+		maxRetries:     o.maxRetries,
+		maxBody:        o.maxBody,
+		observe: func(req *http.Request, resp *http.Response) {
+			observeResponse(o, req, resp, false)
+		},
+	}
 
 	rp := newReverseProxy(o)
 	handler := http.Handler(rp)
+	if cfg.Server.WriteTimeout > 0 {
+		handler = withResponseController(handler)
+	}
 
 	if o.limiter != nil {
 		automaticTokenCount := cfg.AutomaticTokenCount
@@ -91,6 +109,17 @@ func New(cfg config.Config, opts ...Option) http.Handler {
 	handler = router.ProxyHandler(handler) // Outermost — parse path first
 
 	return handler
+}
+
+type responseControllerKey struct{}
+
+// withResponseController lets the upstream transport extend the write deadline
+// when it retries.
+func withResponseController(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), responseControllerKey{}, http.NewResponseController(w))
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func newReverseProxy(o options) *httputil.ReverseProxy {
@@ -142,21 +171,7 @@ func newReverseProxy(o options) *httputil.ReverseProxy {
 			region := "unknown"
 			bucket := "unknown"
 
-			var statusCode int
-			var msg string
-			var retryAfter time.Duration
-			switch {
-			case errors.Is(err, context.Canceled):
-				statusCode = 499
-				msg = "client closed request"
-			case errors.Is(err, context.DeadlineExceeded):
-				statusCode = http.StatusRequestTimeout
-				msg = "request timed out"
-				retryAfter = time.Second
-			default:
-				statusCode = http.StatusBadGateway
-				msg = "upstream unavailable"
-			}
+			statusCode, msg, retryAfter := errorResponse(err)
 
 			if info, ok := admissionFromContext(r.Context()); ok && o.limiter != nil {
 				prio = info.Priority
@@ -179,6 +194,28 @@ func newReverseProxy(o options) *httputil.ReverseProxy {
 			http.Error(w, msg, statusCode)
 		},
 	}
+}
+
+// errorResponse maps a proxy error to the status sent to the client. Upstream
+// failures get a 5xx with Retry-After, which clients treat as retryable.
+func errorResponse(err error) (int, string, time.Duration) {
+	var upstreamErr *upstreamError
+	switch {
+	case errors.Is(err, context.Canceled):
+		return 499, "client closed request", 0
+	case errors.As(err, &upstreamErr) && upstreamErr.timeout():
+		return http.StatusGatewayTimeout, upstreamFailureMessage(upstreamErr), time.Second
+	case errors.As(err, &upstreamErr):
+		return http.StatusBadGateway, upstreamFailureMessage(upstreamErr), time.Second
+	case errors.Is(err, context.DeadlineExceeded):
+		return http.StatusGatewayTimeout, "upstream timed out", time.Second
+	default:
+		return http.StatusBadGateway, "upstream unavailable", 0
+	}
+}
+
+func upstreamFailureMessage(err *upstreamError) string {
+	return "upstream request failed (" + err.cause + ") after " + strconv.Itoa(err.attempts) + " attempt(s)"
 }
 
 func observeResponse(o options, req *http.Request, resp *http.Response, recordDuration bool) {

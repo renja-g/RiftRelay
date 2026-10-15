@@ -52,11 +52,31 @@ Paths are matched to known Riot API route patterns for bucketing — `/lol/match
 | Health | `204` | Healthy |
 | Invalid proxy path or header | `400` | Malformed path, invalid authorization, bad token index, Bearer request without a pinned index, or unknown `X-Rate-Budget` |
 | Admission rejection | `429` | Queue full or admission timeout; `Retry-After` included when applicable |
-| Upstream timeout | `408` | Upstream call exceeded timeout budget |
 | Client disconnect | `499` | Client hung up before upstream responded |
-| Upstream unavailable | `502` | Upstream unreachable or unrecoverable failure |
+| Upstream unavailable | `502` | Upstream unreachable, or its response failed and retries did not recover it; `Retry-After: 1` |
+| Upstream timeout | `504` | Upstream attempts exceeded `UPSTREAM_TIMEOUT` before the full response arrived; `Retry-After: 1` |
 
-RiftRelay retries upstream `429`s when Riot includes a valid `Retry-After` header. Each retryable response is reported to admission control before the wait begins, preventing concurrent requests from bypassing the same backoff window.
+When Riot itself returns an error status that RiftRelay does not recover, such as a `503` or `504`, that response is forwarded unchanged.
+
+## Upstream retries
+
+RiftRelay reads the full response body of `GET` and `HEAD` requests before it sends anything to the client. It checks that the body arrived completely and, for successful JSON responses, that it decompresses and parses. A response that fails partway through is retried, so a client never receives a `200` with a truncated or invalid body. It receives either the complete response or an error status.
+
+Retried failures:
+
+- the HTTP/2 stream is reset, or the connection is closed by `GOAWAY`, during the response
+- the connection drops mid-body (`unexpected EOF`) or before a response
+- no response headers arrive in time, or the body stalls past `UPSTREAM_TIMEOUT`
+- a successful JSON body is not valid JSON or not a valid gzip stream
+- `502`, `503` and `504`, with backoff (or the response's `Retry-After`, up to 5 seconds)
+
+Up to `UPSTREAM_RETRIES` retries (default `2`) are made per request. Other `4xx` responses are never retried. Requests with other methods are streamed and only retried on `429`.
+
+Every retry goes through admission control again. It keeps the request's region, bucket, rate budget and pinned token index, but is admitted at high priority: it skips pacing, since it already waited its turn, but still respects Riot's rate limits. It may use a different automatically selected token. Each retry admission has its own `ADMISSION_TIMEOUT`, and retries are not counted in `riftrelay_admission_total` or `riftrelay_queue_wait_seconds`. See `riftrelay_upstream_failures_total` in [metrics](/docs/reference/metrics).
+
+RiftRelay also retries upstream `429`s, up to 3 times, when Riot includes a valid `Retry-After` header. Each `429` is reported to admission control before the retry is admitted, so the retry and concurrent requests wait out the same backoff window.
+
+Responses larger than 16 MiB are streamed after the first 16 MiB instead of being held, and a failure after that point cannot be retried.
 
 ## Exposure recommendations
 
