@@ -1,8 +1,11 @@
 package proxy
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -133,6 +136,9 @@ func newReverseProxy(o options) *httputil.ReverseProxy {
 		Transport:  o.baseTransport,
 		BufferPool: bufferPool{pool: pool},
 		ModifyResponse: func(resp *http.Response) error {
+			if err := readBody(resp); err != nil {
+				return err
+			}
 			observeResponse(o, resp.Request, resp, true)
 			return nil
 		},
@@ -179,6 +185,24 @@ func newReverseProxy(o options) *httputil.ReverseProxy {
 			http.Error(w, msg, statusCode)
 		},
 	}
+}
+
+// readBody reads the upstream body before any response is written. Riot can
+// reset a stream after sending headers; the failed read then reaches the error
+// handler as a retryable 502 instead of a truncated success.
+func readBody(resp *http.Response) error {
+	if resp.Body == nil || resp.Body == http.NoBody {
+		return nil
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		return fmt.Errorf("read upstream body: %w", err)
+	}
+	resp.Body = io.NopCloser(bytes.NewReader(body))
+	resp.ContentLength = int64(len(body))
+	resp.Header.Set("Content-Length", strconv.Itoa(len(body)))
+	return nil
 }
 
 func observeResponse(o options, req *http.Request, resp *http.Response, recordDuration bool) {

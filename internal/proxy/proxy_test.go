@@ -3,10 +3,13 @@ package proxy
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/iotest"
 	"testing/synctest"
 	"time"
 
@@ -234,6 +237,35 @@ func TestProxyNewMapsTransportErrors(t *testing.T) {
 				t.Fatalf("Retry-After = %q, want %q", got, tt.wantRetry)
 			}
 		})
+	}
+}
+
+// Riot can reset an HTTP/2 stream after sending the response headers. The
+// client must get a retryable status instead of a truncated success.
+func TestProxyNewMapsFailedUpstreamBodyToBadGateway(t *testing.T) {
+	t.Parallel()
+
+	cfg := testutil.DummyConfig()
+	cfg.UpstreamTimeout = 0
+	handler := New(cfg, WithBaseTransport(testutil.RoundTripperFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(io.MultiReader(strings.NewReader(`[{"puuid":`), iotest.ErrReader(errors.New("stream error: INTERNAL_ERROR")))),
+			Request:    r,
+		}, nil
+	})))
+
+	req := httptest.NewRequest(http.MethodGet, "/europe/riot/account/v1/accounts/me", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if got, want := rec.Code, http.StatusBadGateway; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+	if strings.Contains(rec.Body.String(), "puuid") {
+		t.Fatalf("body = %q, want no partial upstream body", rec.Body.String())
 	}
 }
 
