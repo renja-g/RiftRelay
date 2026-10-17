@@ -54,7 +54,9 @@ Paths are matched to known Riot API route patterns for bucketing — `/lol/match
 | Admission rejection | `429` | Queue full or admission timeout; `Retry-After` included when applicable |
 | Upstream timeout | `408` | Upstream call exceeded timeout budget |
 | Client disconnect | `499` | Client hung up before upstream responded |
-| Upstream unavailable | `502` | Upstream unreachable or unrecoverable failure |
+| Upstream unavailable | `502` | Upstream unreachable, unrecoverable failure, or response body interrupted |
+
+RiftRelay reads the full upstream body before responding, so a stream Riot resets after sending headers becomes a `502` rather than a truncated success.
 
 RiftRelay retries upstream `429`s when Riot includes a valid `Retry-After` header. Each retryable response is reported to admission control before the wait begins, preventing concurrent requests from bypassing the same backoff window.
 
